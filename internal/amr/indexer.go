@@ -12,7 +12,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	pq "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/parquet"
+	pq "github.com/allthebacteria/atb-cli/internal/parquet"
 )
 
 const amrSchema = `

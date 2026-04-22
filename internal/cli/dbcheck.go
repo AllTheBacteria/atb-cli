@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/fetch"
+	"github.com/allthebacteria/atb-cli/internal/fetch"
 )
 
 // ensureDatabase checks if the parquet database exists at dir.

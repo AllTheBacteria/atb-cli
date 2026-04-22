@@ -11,8 +11,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/amr"
-	idx "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/index"
+	"github.com/allthebacteria/atb-cli/internal/amr"
+	idx "github.com/allthebacteria/atb-cli/internal/index"
 )
 
 // NewServer creates and configures an MCP server with all ATB tools.

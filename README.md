@@ -48,7 +48,7 @@ Pre-built binaries for all platforms:
 | Windows | x86_64 (amd64) | `atb-cli_<version>_windows_amd64.zip` |
 | Windows | ARM64 | `atb-cli_<version>_windows_arm64.zip` |
 
-**Latest release:** [github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/latest](https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/latest)
+**Latest release:** [github.com/allthebacteria/atb-cli/releases/latest](https://github.com/allthebacteria/atb-cli/releases/latest)
 
 Download the file for your platform, extract, and place the `atb` binary (or `atb.exe` on Windows) somewhere in your `PATH`.
 
@@ -57,17 +57,17 @@ Download the file for your platform, extract, and place the `atb` binary (or `at
 **One-line install** (Linux/macOS):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AMR-genomics-hackathon-2026/atb-cli-claude/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/allthebacteria/atb-cli/main/install.sh | bash
 ```
 
 This detects your OS and architecture, downloads the latest release, and installs to `~/.local/bin`. It will add the directory to your `PATH` automatically if needed.
 
 ```bash
 # Install a specific version
-ATB_VERSION=v0.1.0 curl -fsSL https://raw.githubusercontent.com/AMR-genomics-hackathon-2026/atb-cli-claude/main/install.sh | bash
+ATB_VERSION=v0.1.0 curl -fsSL https://raw.githubusercontent.com/allthebacteria/atb-cli/main/install.sh | bash
 
 # Install to a custom directory
-ATB_INSTALL_DIR=~/.local/bin curl -fsSL https://raw.githubusercontent.com/AMR-genomics-hackathon-2026/atb-cli-claude/main/install.sh | bash
+ATB_INSTALL_DIR=~/.local/bin curl -fsSL https://raw.githubusercontent.com/allthebacteria/atb-cli/main/install.sh | bash
 ```
 
 **Windows:** Download the `.zip` from the [Download](#download) table above, extract, and add `atb.exe` to your PATH.
@@ -76,11 +76,11 @@ ATB_INSTALL_DIR=~/.local/bin curl -fsSL https://raw.githubusercontent.com/AMR-ge
 
 ```bash
 # Go install (requires Go 1.23+)
-go install github.com/AMR-genomics-hackathon-2026/atb-cli-claude/cmd/atb@latest
+go install github.com/allthebacteria/atb-cli/cmd/atb@latest
 
 # From source
-git clone https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude.git
-cd atb-cli-claude
+git clone https://github.com/allthebacteria/atb-cli.git
+cd atb-cli
 make build    # binary at ./bin/atb
 ```
 
@@ -115,7 +115,7 @@ If you don't have the parquet files yet:
     feat: find closest ATB genomes via sketch distances
     ...
 
-  Release: https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/tag/v0.9.0
+  Release: https://github.com/allthebacteria/atb-cli/releases/tag/v0.9.0
 
   Run 'atb update' to upgrade.
 ```
@@ -548,7 +548,7 @@ Config is stored at `~/.config/atb/config.toml`.
 
 ```bash
 # Claude Code - runs directly from GitHub, available in all projects
-claude mcp add --scope user atb -- go run github.com/AMR-genomics-hackathon-2026/atb-cli-claude/cmd/atb@latest mcp
+claude mcp add --scope user atb -- go run github.com/allthebacteria/atb-cli/cmd/atb@latest mcp
 ```
 
 First call takes ~10s to compile; cached after that.
@@ -557,7 +557,7 @@ First call takes ~10s to compile; cached after that.
 
 ```bash
 # 1. Install atb
-curl -fsSL https://raw.githubusercontent.com/AMR-genomics-hackathon-2026/atb-cli-claude/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/allthebacteria/atb-cli/main/install.sh | bash
 
 # 2. Fetch the database and build the index
 atb fetch

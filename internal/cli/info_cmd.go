@@ -9,8 +9,8 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
 
-	idx "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/index"
-	pq "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/parquet"
+	idx "github.com/allthebacteria/atb-cli/internal/index"
+	pq "github.com/allthebacteria/atb-cli/internal/parquet"
 )
 
 // printENAInfo prints the ENA metadata section for a sample when the ENA

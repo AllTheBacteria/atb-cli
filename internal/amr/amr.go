@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	pq "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/parquet"
+	pq "github.com/allthebacteria/atb-cli/internal/parquet"
 )
 
 // AMRFileName is the single merged parquet file containing all AMR data.

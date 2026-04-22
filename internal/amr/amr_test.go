@@ -5,7 +5,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/amr"
+	"github.com/allthebacteria/atb-cli/internal/amr"
 )
 
 func fixturesDir(t *testing.T) string {

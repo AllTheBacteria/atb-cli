@@ -11,7 +11,7 @@ import (
 
 	parquetgo "github.com/parquet-go/parquet-go"
 
-	pq "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/parquet"
+	pq "github.com/allthebacteria/atb-cli/internal/parquet"
 )
 
 // PartitionDir is the subdirectory under the data dir where genus partitions live.

@@ -8,9 +8,9 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
 
-	idx "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/index"
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/output"
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/query"
+	idx "github.com/allthebacteria/atb-cli/internal/index"
+	"github.com/allthebacteria/atb-cli/internal/output"
+	"github.com/allthebacteria/atb-cli/internal/query"
 )
 
 func newMLSTCmd() *cobra.Command {

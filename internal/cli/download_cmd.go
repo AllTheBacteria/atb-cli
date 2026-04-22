@@ -8,7 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/download"
+	"github.com/allthebacteria/atb-cli/internal/download"
 )
 
 func newDownloadCmd() *cobra.Command {

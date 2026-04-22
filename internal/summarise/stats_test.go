@@ -3,8 +3,8 @@ package summarise_test
 import (
 	"testing"
 
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/query"
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/summarise"
+	"github.com/allthebacteria/atb-cli/internal/query"
+	"github.com/allthebacteria/atb-cli/internal/summarise"
 )
 
 func makeRows() []query.ResultRow {

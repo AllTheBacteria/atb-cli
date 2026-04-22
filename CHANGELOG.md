@@ -2,6 +2,21 @@
 
 All notable changes to `atb-cli` are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [v0.13.0](https://github.com/allthebacteria/atb-cli/releases/tag/v0.13.0) - 2026-04-22
+
+### Changed
+
+- **Repository moved to [allthebacteria/atb-cli](https://github.com/allthebacteria/atb-cli).** This is the first release under the new home.
+- Go module path renamed from `github.com/AMR-genomics-hackathon-2026/atb-cli-claude` to `github.com/allthebacteria/atb-cli`. Users running `go install github.com/AMR-genomics-hackathon-2026/atb-cli-claude/cmd/atb@latest` must switch to `go install github.com/allthebacteria/atb-cli/cmd/atb@latest`.
+- Documentation URLs (`README.md`, `docs/deployment.md`) updated to reference the new repository.
+- Container image path updated to `ghcr.io/allthebacteria/atb-cli`.
+
+### Migration notes
+
+- Users on `v0.12.3` or `v0.12.4` (the migration bridge) auto-discover this release via `atb update`; no manual reinstall required.
+- Users on `v0.12.2` or earlier should first run `atb update` to reach the bridge (`v0.12.4`), then run `atb update` again to reach this release. Alternatively: reinstall via `curl -fsSL https://raw.githubusercontent.com/allthebacteria/atb-cli/main/install.sh | bash`.
+- Historical release assets for `v0.1.0`–`v0.12.4` remain downloadable from the archived old repo at `github.com/AMR-genomics-hackathon-2026/atb-cli-claude`.
+
 ## [v0.12.4](https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude/releases/tag/v0.12.4) - 2026-04-22
 
 ### Fixed

@@ -11,7 +11,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/spf13/cobra"
 
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/config"
+	"github.com/allthebacteria/atb-cli/internal/config"
 )
 
 func newConfigCmd() *cobra.Command {

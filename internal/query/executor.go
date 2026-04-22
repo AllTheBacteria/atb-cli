@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	pq "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/parquet"
+	pq "github.com/allthebacteria/atb-cli/internal/parquet"
 )
 
 // ResultRow is a single query result as a map of column name to string value.

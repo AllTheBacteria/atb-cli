@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/sources"
+	"github.com/allthebacteria/atb-cli/internal/sources"
 )
 
 // CoreTables returns the names of the core parquet tables.
