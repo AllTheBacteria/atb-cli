@@ -2,9 +2,9 @@
 set -euo pipefail
 
 # atb-cli installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/AMR-genomics-hackathon-2026/atb-cli-claude/main/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/allthebacteria/atb-cli/main/install.sh | bash
 
-REPO="AMR-genomics-hackathon-2026/atb-cli-claude"
+REPO="allthebacteria/atb-cli"
 BINARY="atb"
 INSTALL_DIR="${ATB_INSTALL_DIR:-${HOME}/.local/bin}"
 
