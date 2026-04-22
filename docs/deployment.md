@@ -5,8 +5,8 @@ Deploy the ATB MCP server as a Docker container so ChatGPT, OpenAI API, or any r
 ## Quick Start (Docker Compose)
 
 ```bash
-git clone https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude.git
-cd atb-cli-claude
+git clone https://github.com/allthebacteria/atb-cli.git
+cd atb-cli
 docker compose up -d
 ```
 
@@ -84,8 +84,8 @@ Your endpoint: `https://your-app.up.railway.app/sse`
 
 ```bash
 # On your server
-git clone https://github.com/AMR-genomics-hackathon-2026/atb-cli-claude.git
-cd atb-cli-claude
+git clone https://github.com/allthebacteria/atb-cli.git
+cd atb-cli
 docker compose up -d
 
 # Set up a reverse proxy (nginx example)
@@ -118,7 +118,7 @@ If you already have the parquet files and index somewhere, mount them directly:
 docker run -d \
   -p 8080:8080 \
   -v /path/to/your/parquet/data:/data:ro \
-  ghcr.io/amr-genomics-hackathon-2026/atb-cli-claude:latest
+  ghcr.io/allthebacteria/atb-cli:latest
 ```
 
 ## Environment Variables
@@ -160,6 +160,6 @@ atb --data-dir /data index --force
 
 # Or restart the container after deleting the data
 docker compose down
-docker volume rm atb-cli-claude_atb-data
+docker volume rm atb-cli_atb-data
 docker compose up -d
 ```

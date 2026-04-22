@@ -12,10 +12,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/amr"
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/output"
-	pq "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/parquet"
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/query"
+	"github.com/allthebacteria/atb-cli/internal/amr"
+	"github.com/allthebacteria/atb-cli/internal/output"
+	pq "github.com/allthebacteria/atb-cli/internal/parquet"
+	"github.com/allthebacteria/atb-cli/internal/query"
 )
 
 func newAMRCmd() *cobra.Command {

@@ -12,11 +12,11 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
 
-	idx "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/index"
-	pq "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/parquet"
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/output"
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/query"
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/suggest"
+	idx "github.com/allthebacteria/atb-cli/internal/index"
+	pq "github.com/allthebacteria/atb-cli/internal/parquet"
+	"github.com/allthebacteria/atb-cli/internal/output"
+	"github.com/allthebacteria/atb-cli/internal/query"
+	"github.com/allthebacteria/atb-cli/internal/suggest"
 )
 
 func newQueryCmd() *cobra.Command {

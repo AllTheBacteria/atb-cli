@@ -11,9 +11,9 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
 
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/download"
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/osf"
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/output"
+	"github.com/allthebacteria/atb-cli/internal/download"
+	"github.com/allthebacteria/atb-cli/internal/osf"
+	"github.com/allthebacteria/atb-cli/internal/output"
 )
 
 func newOSFCmd() *cobra.Command {

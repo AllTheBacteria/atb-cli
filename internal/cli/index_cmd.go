@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/index"
+	"github.com/allthebacteria/atb-cli/internal/index"
 )
 
 func newIndexCmd() *cobra.Command {

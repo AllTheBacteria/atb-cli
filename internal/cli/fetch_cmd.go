@@ -12,9 +12,9 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
 
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/amr"
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/fetch"
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/index"
+	"github.com/allthebacteria/atb-cli/internal/amr"
+	"github.com/allthebacteria/atb-cli/internal/fetch"
+	"github.com/allthebacteria/atb-cli/internal/index"
 )
 
 func newFetchCmd() *cobra.Command {

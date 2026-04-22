@@ -7,7 +7,7 @@ import (
 
 	"github.com/dustin/go-humanize"
 
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/query"
+	"github.com/allthebacteria/atb-cli/internal/query"
 )
 
 // Summary holds aggregate statistics for a collection of genome rows.

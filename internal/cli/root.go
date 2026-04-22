@@ -3,7 +3,7 @@ package cli
 import (
 	"os"
 
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/selfupdate"
+	"github.com/allthebacteria/atb-cli/internal/selfupdate"
 	"github.com/spf13/cobra"
 )
 

@@ -5,8 +5,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/download"
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/sources"
+	"github.com/allthebacteria/atb-cli/internal/download"
+	"github.com/allthebacteria/atb-cli/internal/sources"
 )
 
 // AssemblyDownloadConfig holds options for downloading genome assemblies.

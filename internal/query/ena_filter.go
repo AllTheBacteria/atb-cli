@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	pq "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/parquet"
+	pq "github.com/allthebacteria/atb-cli/internal/parquet"
 )
 
 // ENAFileName is the name of the ENA metadata parquet file on disk.

@@ -8,12 +8,12 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
 
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/config"
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/download"
-	idx "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/index"
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/output"
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/sketch"
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/sources"
+	"github.com/allthebacteria/atb-cli/internal/config"
+	"github.com/allthebacteria/atb-cli/internal/download"
+	idx "github.com/allthebacteria/atb-cli/internal/index"
+	"github.com/allthebacteria/atb-cli/internal/output"
+	"github.com/allthebacteria/atb-cli/internal/sketch"
+	"github.com/allthebacteria/atb-cli/internal/sources"
 )
 
 func sketchDir(dir string) string {

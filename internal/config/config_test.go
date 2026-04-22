@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/config"
+	"github.com/allthebacteria/atb-cli/internal/config"
 )
 
 func TestDefaultConfig(t *testing.T) {

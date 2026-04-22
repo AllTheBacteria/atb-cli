@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/query"
+	"github.com/allthebacteria/atb-cli/internal/query"
 )
 
 // readResultsFromFile reads a CSV or TSV file into []query.ResultRow.

@@ -6,8 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/query"
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/summarise"
+	"github.com/allthebacteria/atb-cli/internal/query"
+	"github.com/allthebacteria/atb-cli/internal/summarise"
 )
 
 func newSummariseCmd() *cobra.Command {

@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/sources"
+	"github.com/allthebacteria/atb-cli/internal/sources"
 )
 
 const CacheMaxAge = 7 * 24 * time.Hour

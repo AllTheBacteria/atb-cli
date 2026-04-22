@@ -9,8 +9,8 @@ import (
 
 	parquetgo "github.com/parquet-go/parquet-go"
 
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/amr"
-	pq "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/parquet"
+	"github.com/allthebacteria/atb-cli/internal/amr"
+	pq "github.com/allthebacteria/atb-cli/internal/parquet"
 )
 
 func setupBenchData(b *testing.B, nRows int) string {

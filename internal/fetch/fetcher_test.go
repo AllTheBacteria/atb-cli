@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/fetch"
+	"github.com/allthebacteria/atb-cli/internal/fetch"
 )
 
 func TestCoreTables(t *testing.T) {

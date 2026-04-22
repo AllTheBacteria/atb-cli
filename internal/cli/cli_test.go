@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	idx "github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/index"
+	idx "github.com/allthebacteria/atb-cli/internal/index"
 )
 
 const fixtureDir = "../../testdata/fixtures"

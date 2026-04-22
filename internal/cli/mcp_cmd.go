@@ -5,8 +5,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/config"
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/mcpserver"
+	"github.com/allthebacteria/atb-cli/internal/config"
+	"github.com/allthebacteria/atb-cli/internal/mcpserver"
 )
 
 func newMCPCmd() *cobra.Command {

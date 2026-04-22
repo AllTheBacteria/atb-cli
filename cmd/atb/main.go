@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/AMR-genomics-hackathon-2026/atb-cli-claude/internal/cli"
+	"github.com/allthebacteria/atb-cli/internal/cli"
 )
 
 // version is set via ldflags at build time.
