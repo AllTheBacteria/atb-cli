@@ -95,10 +95,6 @@ Run 'atb fetch' to download the data before querying.`,
   # Append ENA columns without filtering (requires ena_20250506.parquet)
   atb amr --species "Escherichia coli" --class "BETA-LACTAM" --with-ena`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if cmd.Flags().NFlag() == 0 && len(args) == 0 {
-				return cmd.Help()
-			}
-
 			cfg, err := loadConfig()
 			if err != nil {
 				return err
