@@ -24,6 +24,24 @@ All notable changes to `atb-cli` are documented here. Format follows [Keep a Cha
 - Run `atb fetch --force` to download the v4.2.5 AMR parquet and rebuild genus partitions and SQLite indexes. No metadata re-download is required; only the AMR artifact changed.
 - If you skip the refetch, `atb amr` will fail fast with a friendly error rather than returning silently corrupted rows.
 
+## [v0.13.2](https://github.com/allthebacteria/atb-cli/releases/tag/v0.13.2) - 2026-04-29
+
+### Fixed
+
+- `atb amr` invoked with no flags now reaches the unfiltered-scan confirmation prompt instead of short-circuiting to help text. Regression introduced in v0.13.1.
+
+## [v0.13.1](https://github.com/allthebacteria/atb-cli/releases/tag/v0.13.1) - 2026-04-29
+
+### Added
+
+- `--genus` flag on `atb amr` for case-insensitive bacterial genus filtering, independent of `--species`.
+- Confirmation prompt on `atb amr` when invoked without any filter, to guard against accidental full-table scans of the AMR dataset.
+
+### Fixed
+
+- `atb amr --species "Genus species"` now applies a true species-level filter on the row's species column; previously the species token was being conflated with the genus partition lookup.
+- `install.sh` now points at the `allthebacteria/atb-cli` repository URL (post-migration permanent target). Closes the temporary v0.12.4 redirect that targeted the old repo while releases were being cut on the new one.
+
 ## [v0.13.0](https://github.com/allthebacteria/atb-cli/releases/tag/v0.13.0) - 2026-04-22
 
 ### Changed
