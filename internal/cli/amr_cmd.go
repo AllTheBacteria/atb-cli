@@ -390,21 +390,38 @@ func splitCSV(s string) []string {
 	return out
 }
 
-// amrColumns returns the fixed column order for AMR output. When withENA is
-// true, country/collection_date/instrument_platform are appended.
+// amrColumns returns the fixed column order for AMR output. Headers match the
+// AMRFinderPlus v4.2.5 TSV verbatim so downstream tooling sees the same names
+// regardless of source. When withENA is true, country/collection_date/
+// instrument_platform are appended.
 func amrColumns(withENA bool) []string {
 	cols := []string{
-		"sample_accession",
-		"gene_symbol",
-		"element_type",
-		"element_subtype",
-		"class",
-		"subclass",
-		"method",
-		"coverage",
-		"identity",
-		"species",
+		"Name",
+		"Protein id",
+		"Contig id",
+		"Start",
+		"Stop",
+		"Strand",
+		"Element symbol",
+		"Element name",
+		"Scope",
+		"Type",
+		"Subtype",
+		"Class",
+		"Subclass",
+		"Method",
+		"Target length",
+		"Reference sequence length",
+		"% Coverage of reference",
+		"% Identity to reference",
+		"Alignment length",
+		"Closest reference accession",
+		"Closest reference name",
+		"HMM accession",
+		"HMM description",
+		"Hierarchy node",
 		"genus",
+		"species",
 	}
 	if withENA {
 		cols = append(cols, "country", "collection_date", "instrument_platform")
@@ -416,17 +433,32 @@ func amrResultsToOutputRows(results []amr.Result, enaLookup map[string]query.ENA
 	rows := make([]output.Row, len(results))
 	for i, r := range results {
 		row := output.Row{
-			"sample_accession": r.SampleAccession,
-			"gene_symbol":      r.GeneSymbol,
-			"element_type":     r.ElementType,
-			"element_subtype":  r.ElementSubtype,
-			"class":            r.Class,
-			"subclass":         r.Subclass,
-			"method":           r.Method,
-			"coverage":         strconv.FormatFloat(r.Coverage, 'f', 2, 64),
-			"identity":         strconv.FormatFloat(r.Identity, 'f', 2, 64),
-			"species":          r.Species,
-			"genus":            r.Genus,
+			"Name":                        r.SampleAccession,
+			"Protein id":                  r.ProteinID,
+			"Contig id":                   r.ContigID,
+			"Start":                       formatInt(r.Start),
+			"Stop":                        formatInt(r.Stop),
+			"Strand":                      r.Strand,
+			"Element symbol":              r.GeneSymbol,
+			"Element name":                r.ElementName,
+			"Scope":                       r.Scope,
+			"Type":                        r.ElementType,
+			"Subtype":                     r.ElementSubtype,
+			"Class":                       r.Class,
+			"Subclass":                    r.Subclass,
+			"Method":                      r.Method,
+			"Target length":               formatInt(r.TargetLength),
+			"Reference sequence length":   formatInt(r.ReferenceSequenceLength),
+			"% Coverage of reference":     strconv.FormatFloat(r.Coverage, 'f', 2, 64),
+			"% Identity to reference":     strconv.FormatFloat(r.Identity, 'f', 2, 64),
+			"Alignment length":            formatInt(r.AlignmentLength),
+			"Closest reference accession": r.ClosestReferenceAccession,
+			"Closest reference name":      r.ClosestReferenceName,
+			"HMM accession":               r.HMMAccession,
+			"HMM description":             r.HMMDescription,
+			"Hierarchy node":              r.HierarchyNode,
+			"genus":                       r.Genus,
+			"species":                     r.Species,
 		}
 		if withENA {
 			rec := enaLookup[r.SampleAccession]
@@ -437,4 +469,13 @@ func amrResultsToOutputRows(results []amr.Result, enaLookup map[string]query.ENA
 		rows[i] = row
 	}
 	return rows
+}
+
+// formatInt renders an int64 as a string, but emits "" for zero so the AMRFP
+// "no value" cells round-trip cleanly through TSV/CSV/JSON output.
+func formatInt(v int64) string {
+	if v == 0 {
+		return ""
+	}
+	return strconv.FormatInt(v, 10)
 }

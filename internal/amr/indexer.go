@@ -15,20 +15,37 @@ import (
 	pq "github.com/allthebacteria/atb-cli/internal/parquet"
 )
 
+// amrSchema mirrors the 26 columns of AMRFinderPlus v4.2.5 in the same order
+// as pq.AMRRow. The amrInsert placeholders, the buildOneIndex Exec args, the
+// buildSQL SELECT, and the QueryIndex Scan must stay aligned with this order.
 const amrSchema = `
 CREATE TABLE amr (
     name TEXT,
+    protein_id TEXT,
+    contig_id TEXT,
+    start INTEGER,
+    stop INTEGER,
+    strand TEXT,
     gene_symbol TEXT,
-    hierarchy_node TEXT,
+    element_name TEXT,
+    scope TEXT,
     element_type TEXT,
     element_subtype TEXT,
-    coverage REAL,
-    identity REAL,
-    method TEXT,
     class TEXT,
     subclass TEXT,
-    species TEXT,
-    genus TEXT
+    method TEXT,
+    target_length INTEGER,
+    reference_sequence_length INTEGER,
+    coverage REAL,
+    identity REAL,
+    alignment_length INTEGER,
+    closest_reference_accession TEXT,
+    closest_reference_name TEXT,
+    hmm_accession TEXT,
+    hmm_description TEXT,
+    hierarchy_node TEXT,
+    genus TEXT,
+    species TEXT
 );
 CREATE INDEX idx_amr_name ON amr(name);
 CREATE INDEX idx_amr_gene ON amr(gene_symbol);
@@ -36,7 +53,7 @@ CREATE INDEX idx_amr_class ON amr(class);
 CREATE INDEX idx_amr_type ON amr(element_type);
 `
 
-const amrInsert = `INSERT INTO amr VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
+const amrInsert = `INSERT INTO amr VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
 
 const amrBatchSize = 10_000
 
@@ -150,10 +167,16 @@ func buildOneIndex(parquetPath, sqlitePath string) (int64, error) {
 		for i := start; i < end; i++ {
 			r := rows[i]
 			if _, err := stmt.Exec(
-				r.Name, r.GeneSymbol, r.HierarchyNode,
+				r.Name, r.ProteinID, r.ContigID,
+				r.Start, r.Stop, r.Strand,
+				r.GeneSymbol, r.ElementName, r.Scope,
 				r.ElementType, r.ElementSubtype,
-				r.Coverage, r.Identity, r.Method,
-				r.Class, r.Subclass, r.Species, r.Genus,
+				r.Class, r.Subclass, r.Method,
+				r.TargetLength, r.ReferenceSequenceLength,
+				r.Coverage, r.Identity, r.AlignmentLength,
+				r.ClosestReferenceAccession, r.ClosestReferenceName,
+				r.HMMAccession, r.HMMDescription, r.HierarchyNode,
+				r.Genus, r.Species,
 			); err != nil {
 				_ = stmt.Close()
 				_ = tx.Rollback()
@@ -229,7 +252,7 @@ func QueryIndex(dbPath string, filters Filters) ([]Result, error) {
 	query, args := buildSQL(filters)
 	rows, err := db.Query(query, args...)
 	if err != nil {
-		return nil, err
+		return nil, wrapStaleIndexError(dbPath, err)
 	}
 	defer rows.Close()
 
@@ -237,10 +260,16 @@ func QueryIndex(dbPath string, filters Filters) ([]Result, error) {
 	for rows.Next() {
 		var r Result
 		if err := rows.Scan(
-			&r.SampleAccession, &r.GeneSymbol,
+			&r.SampleAccession, &r.ProteinID, &r.ContigID,
+			&r.Start, &r.Stop, &r.Strand,
+			&r.GeneSymbol, &r.ElementName, &r.Scope,
 			&r.ElementType, &r.ElementSubtype,
-			&r.Coverage, &r.Identity, &r.Method,
-			&r.Class, &r.Subclass, &r.Species, &r.Genus,
+			&r.Class, &r.Subclass, &r.Method,
+			&r.TargetLength, &r.ReferenceSequenceLength,
+			&r.Coverage, &r.Identity, &r.AlignmentLength,
+			&r.ClosestReferenceAccession, &r.ClosestReferenceName,
+			&r.HMMAccession, &r.HMMDescription, &r.HierarchyNode,
+			&r.Genus, &r.Species,
 		); err != nil {
 			return nil, err
 		}
@@ -286,8 +315,12 @@ func buildSQL(f Filters) (string, []any) {
 		clauses = append(clauses, "LOWER(species) IN ("+strings.Join(placeholders, ",")+")")
 	}
 
-	q := `SELECT name, gene_symbol, element_type, element_subtype,
-	       coverage, identity, method, class, subclass, species, genus
+	q := `SELECT name, protein_id, contig_id, start, stop, strand,
+	       gene_symbol, element_name, scope, element_type, element_subtype,
+	       class, subclass, method, target_length, reference_sequence_length,
+	       coverage, identity, alignment_length,
+	       closest_reference_accession, closest_reference_name,
+	       hmm_accession, hmm_description, hierarchy_node, genus, species
 	       FROM amr`
 	if len(clauses) > 0 {
 		q += " WHERE " + strings.Join(clauses, " AND ")
@@ -325,4 +358,20 @@ func workers() int {
 		n = 2
 	}
 	return n
+}
+
+// wrapStaleIndexError annotates SQLite errors caused by querying an index
+// built from the older AMRFinderPlus v3.12.8 schema. The "no such column"
+// error is the loud failure mode (the new SQL references columns like
+// gene_symbol/element_type/element_subtype that don't exist in v3 indexes).
+func wrapStaleIndexError(dbPath string, err error) error {
+	if err == nil {
+		return nil
+	}
+	if !strings.Contains(err.Error(), "no such column") {
+		return err
+	}
+	return fmt.Errorf("AMR SQLite index %s appears stale (built from an older "+
+		"AMRFinderPlus schema): %w. Run 'atb fetch --force' to rebuild.",
+		filepath.Base(dbPath), err)
 }

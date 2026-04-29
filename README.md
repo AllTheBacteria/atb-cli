@@ -100,7 +100,7 @@ If you don't have the parquet files yet:
 # Download core tables from OSF (~540MB)
 ./bin/atb fetch
 
-# Or download all tables including ENA metadata (~3GB)
+# Or download all tables including ENA metadata (~4.3 GB)
 ./bin/atb fetch --all
 ```
 
@@ -286,7 +286,7 @@ atb query --species "Escherichia coli" --hq-only --limit 200 \
 
 ### Query AMR genes
 
-AMR data comes from [AMRFinderPlus](https://github.com/ncbi/amr) results run across all ATB genomes. All AMR, stress, and virulence data is in `amrfinderplus.parquet` (25.6M rows, 81 MB), downloaded automatically by `atb fetch` and partitioned by genus for fast queries.
+AMR data comes from [AMRFinderPlus](https://github.com/ncbi/amr) v4.2.5 results run across all ATB genomes. All AMR, stress, and virulence data is in `amrfinderplus.parquet` (~58.5M rows, ~1.18 GB), downloaded automatically by `atb fetch` and partitioned by genus for fast queries.
 
 ```bash
 # Get all AMR gene hits for E. coli (high-quality genomes only)
@@ -350,7 +350,7 @@ atb amr --species "Escherichia coli" --gene "bla%" --download --max-samples 20 -
 
 The `--download` flag downloads the FASTA assembly for each unique sample in the results. Query output is always printed first. Use `--dry-run` to preview URLs without downloading, and `--max-samples` to cap the number of assemblies.
 
-AMR output columns: `sample_accession`, `gene_symbol`, `element_type`, `element_subtype`, `class`, `subclass`, `method`, `coverage`, `identity`, `species`, `genus`
+AMR output preserves the AMRFinderPlus v4.2.5 TSV header verbatim, so all 26 columns are present in the original case and ordering: `Name`, `Protein id`, `Contig id`, `Start`, `Stop`, `Strand`, `Element symbol`, `Element name`, `Scope`, `Type`, `Subtype`, `Class`, `Subclass`, `Method`, `Target length`, `Reference sequence length`, `% Coverage of reference`, `% Identity to reference`, `Alignment length`, `Closest reference accession`, `Closest reference name`, `HMM accession`, `HMM description`, `Hierarchy node`, `genus`, `species`.
 
 With `--with-ena` (or any ENA filter), three extra columns are appended: `country`, `collection_date`, `instrument_platform`.
 
@@ -490,11 +490,11 @@ The file index is cached locally and refreshed every 7 days. Use `--refresh` to 
 ### Fetch the database
 
 ```bash
-# Download core tables including AMR and MLST (~700 MB)
+# Download core tables including AMR and MLST (~1.8 GB)
 # Includes: assembly, assembly_stats, checkm2, sylph, run, mlst, amrfinderplus
 atb fetch
 
-# Download all tables including ENA metadata (~3.2 GB)
+# Download all tables including ENA metadata (~4.3 GB)
 atb fetch --all
 
 # Download specific tables only
@@ -707,7 +707,7 @@ All external URLs are defined in [`internal/sources/sources.go`](internal/source
 |------|--------|---------|
 | **Parquet metadata** (assembly, QC, species, MLST, AMR) | [OSF (h7wzy)](https://osf.io/h7wzy/files/osfstorage) `Aggregated/Latest_2025-05/` | `atb fetch` |
 | **ENA metadata** (geography, platform, dates) | Same OSF project, optional tables | `atb fetch --all` |
-| **AMR/Stress/Virulence genes** | [AMRFinderPlus](https://github.com/ncbi/amr) results as `amrfinderplus.parquet` (25.6M rows, 81 MB) | `atb amr` |
+| **AMR/Stress/Virulence genes** | [AMRFinderPlus](https://github.com/ncbi/amr) v4.2.5 results as `amrfinderplus.parquet` (~58.5M rows, ~1.18 GB) | `atb amr` |
 | **OSF file index** | [all_atb_files.tsv](https://osf.io/r6gcp/) (~3,000 files, 75+ categories) | `atb osf ls`, `atb osf download` |
 | **Sketch database** | Same OSF project, `atb_sketchlib.aggregated.202408` (.skm + .skd, ~4.2 GB) | `atb sketch fetch` |
 | **Genome assemblies** | `allthebacteria-assemblies.s3.eu-west-2.amazonaws.com` | `atb download`, `atb sketch query --download` |

@@ -37,7 +37,7 @@ var TableURLs = map[string]string{
 	"sylph.parquet":          "https://osf.io/download/69c51f90cba7111bb21d2905/", // species-level profiling results
 	"run.parquet":            "https://osf.io/download/69c51f68376eb79a651d2d85/", // run accession mapping
 	"mlst.parquet":           "https://osf.io/download/69c66d33fa3d973d94254f46/", // multi-locus sequence typing
-	"amrfinderplus.parquet":  "https://osf.io/download/69c69298f4dc657ae4253e8b/", // AMR, stress, virulence genes (25.6M rows)
+	"amrfinderplus.parquet":  "https://osf.io/download/69f1e5debb4f674d5fd949ad/", // AMR, stress, virulence genes (AMRFinderPlus v4.2.5, ~58.5M rows)
 
 	// ENA metadata tables (downloaded with `atb fetch --all`)
 	"ena_20250506.parquet":    "https://osf.io/download/69c51f3ab4f99c692d54cf73/", // ENA metadata snapshot 2025-05-06

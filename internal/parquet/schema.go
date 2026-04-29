@@ -65,19 +65,37 @@ type ENARow struct {
 	FastqFTP           string `parquet:"fastq_ftp"`
 }
 
+// AMRRow mirrors every column in the AMRFinderPlus v4.2.5 results parquet.
+// The parquet tags are byte-for-byte identical to the AMRFP TSV header line,
+// so downstream tooling sees the same column names regardless of source.
+// Pre-v4 files (e.g. the old v3.12.8 dump) will not deserialize correctly.
 type AMRRow struct {
-	Name           string  `parquet:"Name"`
-	GeneSymbol     string  `parquet:"Gene symbol"`
-	HierarchyNode  string  `parquet:"Hierarchy node"`
-	ElementType    string  `parquet:"Element type"`
-	ElementSubtype string  `parquet:"Element subtype"`
-	Coverage       float64 `parquet:"% Coverage of reference sequence"`
-	Identity       float64 `parquet:"% Identity to reference sequence"`
-	Method         string  `parquet:"Method"`
-	Class          string  `parquet:"Class"`
-	Subclass       string  `parquet:"Subclass"`
-	Species        string  `parquet:"Species"`
-	Genus          string  `parquet:"Genus"`
+	Name                      string  `parquet:"Name"`
+	ProteinID                 string  `parquet:"Protein id"`
+	ContigID                  string  `parquet:"Contig id"`
+	Start                     int64   `parquet:"Start"`
+	Stop                      int64   `parquet:"Stop"`
+	Strand                    string  `parquet:"Strand"`
+	GeneSymbol                string  `parquet:"Element symbol"`
+	ElementName               string  `parquet:"Element name"`
+	Scope                     string  `parquet:"Scope"`
+	ElementType               string  `parquet:"Type"`
+	ElementSubtype            string  `parquet:"Subtype"`
+	Class                     string  `parquet:"Class"`
+	Subclass                  string  `parquet:"Subclass"`
+	Method                    string  `parquet:"Method"`
+	TargetLength              int64   `parquet:"Target length"`
+	ReferenceSequenceLength   int64   `parquet:"Reference sequence length"`
+	Coverage                  float64 `parquet:"% Coverage of reference"`
+	Identity                  float64 `parquet:"% Identity to reference"`
+	AlignmentLength           int64   `parquet:"Alignment length"`
+	ClosestReferenceAccession string  `parquet:"Closest reference accession"`
+	ClosestReferenceName      string  `parquet:"Closest reference name"`
+	HMMAccession              string  `parquet:"HMM accession"`
+	HMMDescription            string  `parquet:"HMM description"`
+	HierarchyNode             string  `parquet:"Hierarchy node"`
+	Genus                     string  `parquet:"genus"`
+	Species                   string  `parquet:"species"`
 }
 
 type MLSTRow struct {

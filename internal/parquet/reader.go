@@ -8,6 +8,36 @@ import (
 	parquetgo "github.com/parquet-go/parquet-go"
 )
 
+// ColumnNames returns the leaf column names declared in the parquet footer.
+// Reads only the file metadata, so it's cheap regardless of file size.
+func ColumnNames(path string) ([]string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("opening parquet file %q: %w", path, err)
+	}
+	defer f.Close()
+
+	info, err := f.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("stat parquet file %q: %w", path, err)
+	}
+
+	pf, err := parquetgo.OpenFile(f, info.Size())
+	if err != nil {
+		return nil, fmt.Errorf("reading parquet metadata for %q: %w", path, err)
+	}
+
+	paths := pf.Schema().Columns()
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
+		if len(p) == 0 {
+			continue
+		}
+		out = append(out, p[len(p)-1])
+	}
+	return out, nil
+}
+
 // ReadAll reads all rows from a parquet file into a slice of T.
 // Column projection is performed based on the struct's parquet tags.
 func ReadAll[T any](path string) ([]T, error) {

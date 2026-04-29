@@ -225,9 +225,10 @@ func TestAMRDownloadDryRun(t *testing.T) {
 		t.Fatalf("amr --download --dry-run failed: %v\nstderr: %s", err, stderr)
 	}
 
-	// Normal query output should still appear on stdout
-	if !strings.Contains(stdout, "sample_accession") {
-		t.Errorf("expected tabular output on stdout, got:\n%s", stdout)
+	// Normal query output should still appear on stdout. AMR output uses the
+	// AMRFinderPlus v4.2.5 column headers verbatim ("Name", "Element symbol", ...).
+	if !strings.Contains(stdout, "Element symbol") {
+		t.Errorf("expected AMRFP tabular output on stdout, got:\n%s", stdout)
 	}
 
 	// Dry-run messages should appear on stderr

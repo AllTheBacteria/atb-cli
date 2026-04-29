@@ -2,6 +2,7 @@ package amr
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -10,6 +11,10 @@ import (
 
 // AMRFileName is the single merged parquet file containing all AMR data.
 const AMRFileName = "amrfinderplus.parquet"
+
+// v4SchemaMarker is a column name unique to AMRFinderPlus v4.2.5. In v3.12.8
+// this column was named "Gene symbol", so its presence is a reliable v4 probe.
+const v4SchemaMarker = "Element symbol"
 
 // Filters controls which AMR rows are returned by Query.
 type Filters struct {
@@ -37,25 +42,46 @@ type Filters struct {
 	Limit int
 }
 
-// Result is a single AMR gene hit associated with a sample.
+// Result is a single AMR gene hit associated with a sample. The JSON tags
+// preserve the AMRFinderPlus v4.2.5 column names verbatim so MCP output and
+// the original TSV use identical headers.
 type Result struct {
-	SampleAccession string
-	GeneSymbol      string
-	ElementType     string
-	ElementSubtype  string
-	Coverage        float64
-	Identity        float64
-	Method          string
-	Class           string
-	Subclass        string
-	Species         string
-	Genus           string
+	SampleAccession           string  `json:"Name"`
+	ProteinID                 string  `json:"Protein id"`
+	ContigID                  string  `json:"Contig id"`
+	Start                     int64   `json:"Start"`
+	Stop                      int64   `json:"Stop"`
+	Strand                    string  `json:"Strand"`
+	GeneSymbol                string  `json:"Element symbol"`
+	ElementName               string  `json:"Element name"`
+	Scope                     string  `json:"Scope"`
+	ElementType               string  `json:"Type"`
+	ElementSubtype            string  `json:"Subtype"`
+	Class                     string  `json:"Class"`
+	Subclass                  string  `json:"Subclass"`
+	Method                    string  `json:"Method"`
+	TargetLength              int64   `json:"Target length"`
+	ReferenceSequenceLength   int64   `json:"Reference sequence length"`
+	Coverage                  float64 `json:"% Coverage of reference"`
+	Identity                  float64 `json:"% Identity to reference"`
+	AlignmentLength           int64   `json:"Alignment length"`
+	ClosestReferenceAccession string  `json:"Closest reference accession"`
+	ClosestReferenceName      string  `json:"Closest reference name"`
+	HMMAccession              string  `json:"HMM accession"`
+	HMMDescription            string  `json:"HMM description"`
+	HierarchyNode             string  `json:"Hierarchy node"`
+	Genus                     string  `json:"genus"`
+	Species                   string  `json:"species"`
 }
 
 // Query reads AMR data from dataDir, applies filters, and returns matching results.
 // For each genus, it tries (in order): SQLite index, parquet partition, monolithic file.
 // When no genera are given, it scans the full monolithic amrfinderplus.parquet.
 func Query(dataDir string, filters Filters) ([]Result, error) {
+	if err := validateAMRSchema(dataDir); err != nil {
+		return nil, err
+	}
+
 	// Try SQLite indexes first for each genus.
 	if len(filters.Genera) > 0 {
 		return queryWithIndexes(dataDir, filters)
@@ -63,6 +89,53 @@ func Query(dataDir string, filters Filters) ([]Result, error) {
 
 	// No genus filter — full parquet scan.
 	return queryParquet(dataDir, filters)
+}
+
+// validateAMRSchema verifies that on-disk AMR parquet data uses the v4.2.5
+// schema. Returns nil when no AMR data is present yet (so missing-data errors
+// surface from the regular query path with their existing messages).
+func validateAMRSchema(dataDir string) error {
+	if path := firstAMRParquet(dataDir); path != "" {
+		return checkAMRParquet(path)
+	}
+	return nil
+}
+
+// firstAMRParquet returns the path to any AMR parquet file under dataDir,
+// preferring the monolithic file over partitions. Returns "" when none exist.
+func firstAMRParquet(dataDir string) string {
+	monolithic := filepath.Join(dataDir, AMRFileName)
+	if _, err := os.Stat(monolithic); err == nil {
+		return monolithic
+	}
+
+	partDir := filepath.Join(dataDir, PartitionDir)
+	entries, err := os.ReadDir(partDir)
+	if err != nil {
+		return ""
+	}
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".parquet") {
+			return filepath.Join(partDir, e.Name())
+		}
+	}
+	return ""
+}
+
+// checkAMRParquet reads parquet column metadata and verifies the v4 schema.
+func checkAMRParquet(path string) error {
+	cols, err := pq.ColumnNames(path)
+	if err != nil {
+		return fmt.Errorf("inspecting AMR parquet schema: %w", err)
+	}
+	for _, c := range cols {
+		if c == v4SchemaMarker {
+			return nil
+		}
+	}
+	return fmt.Errorf("AMR data at %s uses an older AMRFinderPlus schema "+
+		"(missing %q column). Run 'atb fetch --force' to download the "+
+		"AMRFinderPlus v4.2.5 dataset.", filepath.Base(path), v4SchemaMarker)
 }
 
 func queryWithIndexes(dataDir string, filters Filters) ([]Result, error) {
@@ -156,17 +229,32 @@ func resolvePaths(dataDir string, genera []string) []string {
 
 func rowToResult(row pq.AMRRow) Result {
 	return Result{
-		SampleAccession: row.Name,
-		GeneSymbol:      row.GeneSymbol,
-		ElementType:     row.ElementType,
-		ElementSubtype:  row.ElementSubtype,
-		Coverage:        row.Coverage,
-		Identity:        row.Identity,
-		Method:          row.Method,
-		Class:           row.Class,
-		Subclass:        row.Subclass,
-		Species:         row.Species,
-		Genus:           row.Genus,
+		SampleAccession:           row.Name,
+		ProteinID:                 row.ProteinID,
+		ContigID:                  row.ContigID,
+		Start:                     row.Start,
+		Stop:                      row.Stop,
+		Strand:                    row.Strand,
+		GeneSymbol:                row.GeneSymbol,
+		ElementName:               row.ElementName,
+		Scope:                     row.Scope,
+		ElementType:               row.ElementType,
+		ElementSubtype:            row.ElementSubtype,
+		Class:                     row.Class,
+		Subclass:                  row.Subclass,
+		Method:                    row.Method,
+		TargetLength:              row.TargetLength,
+		ReferenceSequenceLength:   row.ReferenceSequenceLength,
+		Coverage:                  row.Coverage,
+		Identity:                  row.Identity,
+		AlignmentLength:           row.AlignmentLength,
+		ClosestReferenceAccession: row.ClosestReferenceAccession,
+		ClosestReferenceName:      row.ClosestReferenceName,
+		HMMAccession:              row.HMMAccession,
+		HMMDescription:            row.HMMDescription,
+		HierarchyNode:             row.HierarchyNode,
+		Genus:                     row.Genus,
+		Species:                   row.Species,
 	}
 }
 

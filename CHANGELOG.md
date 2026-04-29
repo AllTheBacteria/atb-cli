@@ -2,6 +2,28 @@
 
 All notable changes to `atb-cli` are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [v0.14.0](https://github.com/allthebacteria/atb-cli/releases/tag/v0.14.0) - 2026-04-29
+
+### Changed
+
+- **AMRFinderPlus dataset upgraded from v3.12.8 to v4.2.5** (~25.6M → ~58.5M rows). `atb amr` now reads the new OSF artifact (`amrfinderplus.parquet`, AMRFP v4.2.5) by default.
+- **AMR output now exposes all 26 AMRFinderPlus columns** in TSV, CSV, JSON, and table format (previously a curated subset). Column headers in TSV/CSV/table and JSON keys for `atb amr --format json` and the `atb_amr` MCP tool match the AMRFinderPlus v4.2.5 TSV verbatim — including spaces and the leading `%` in `% Coverage of reference` / `% Identity to reference`.
+
+### Added
+
+- Schema guard on every `atb amr` invocation: detects an older v3.12.8 parquet on disk and returns an actionable error pointing to `atb fetch --force` instead of silently zeroing out renamed columns.
+- SQLite index error wrapping: stale per-genus indexes (built from a v3 dataset) now surface a clear "stale index, run `atb fetch --force` to rebuild" error rather than the raw `no such column` SQLite message.
+
+### Breaking changes
+
+- The AMR column set, header names, and JSON key names have changed. Pipelines that grep specific columns by name (e.g. `Gene symbol`) must update to the v4.2.5 names (e.g. `Element symbol`). Consumers that select columns by index also need to update — the column count went from a smaller curated set to the full 26.
+- On-disk v3.12.8 parquet files and indexes are not forward-compatible with this release.
+
+### Migration notes
+
+- Run `atb fetch --force` to download the v4.2.5 AMR parquet and rebuild genus partitions and SQLite indexes. No metadata re-download is required; only the AMR artifact changed.
+- If you skip the refetch, `atb amr` will fail fast with a friendly error rather than returning silently corrupted rows.
+
 ## [v0.13.0](https://github.com/allthebacteria/atb-cli/releases/tag/v0.13.0) - 2026-04-22
 
 ### Changed

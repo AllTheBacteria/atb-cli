@@ -416,6 +416,117 @@ def generate_mlst():
     print(f"mlst.parquet: {len(table)} rows")
 
 
+def generate_amrfinderplus():
+    """Write a 15-row AMR fixture mirroring the AMRFinderPlus v4.2.5 schema.
+
+    The parquet file contains all 26 columns AMRFinderPlus produces, with the
+    column names byte-for-byte identical to the production data on OSF.
+
+    Test expectations encoded here (see internal/amr/amr_test.go):
+      - 15 rows total: 10 AMR + 5 STRESS
+      - 9 rows with genus="Escherichia"
+      - 4 bla* genes (blaTEM-1, blaEC, blaCTX-M-15, blaZ)
+      - At least one row with class="EFFLUX"
+      - Coverage values both above and below 99.0
+    """
+    # Each row tuple: (name, gene, type, subtype, cov, ident, method, class,
+    #                  subclass, species, genus)
+    base_rows = [
+        # 10 AMR rows
+        ("SAMN00000001", "blaTEM-1",   "AMR", "AMR", 100.0, 100.00, "ALLELEX", "BETA-LACTAM",   "BETA-LACTAM",   "Escherichia coli",        "Escherichia"),
+        ("SAMN00000001", "acrF",       "AMR", "AMR", 100.0,  98.07, "BLASTX",  "EFFLUX",        "EFFLUX",        "Escherichia coli",        "Escherichia"),
+        ("SAMN00000001", "blaEC",      "AMR", "AMR", 100.0,  92.57, "BLASTX",  "BETA-LACTAM",   "BETA-LACTAM",   "Escherichia coli",        "Escherichia"),
+        ("SAMN00000002", "blaTEM-1",   "AMR", "AMR", 100.0, 100.00, "ALLELEX", "BETA-LACTAM",   "BETA-LACTAM",   "Escherichia coli",        "Escherichia"),
+        ("SAMN00000002", "sul1",       "AMR", "AMR", 100.0, 100.00, "EXACTX",  "SULFONAMIDE",   "SULFONAMIDE",   "Escherichia coli",        "Escherichia"),
+        ("SAMN00000003", "mecA",       "AMR", "AMR", 100.0,  99.50, "EXACTX",  "METHICILLIN",   "METHICILLIN",   "Staphylococcus aureus",   "Staphylococcus"),
+        ("SAMN00000003", "blaZ",       "AMR", "AMR", 100.0,  98.00, "BLASTX",  "BETA-LACTAM",   "BETA-LACTAM",   "Staphylococcus aureus",   "Staphylococcus"),
+        ("SAMN00000005", "blaCTX-M-15","AMR", "AMR", 100.0, 100.00, "ALLELEX", "BETA-LACTAM",   "BETA-LACTAM",   "Salmonella enterica",     "Salmonella"),
+        ("SAMN00000005", "aadA1",      "AMR", "AMR", 100.0, 100.00, "EXACTX",  "AMINOGLYCOSIDE","STREPTOMYCIN",  "Salmonella enterica",     "Salmonella"),
+        ("SAMN00000005", "tet(A)",     "AMR", "AMR", 100.0, 100.00, "EXACTX",  "TETRACYCLINE",  "TETRACYCLINE",  "Salmonella enterica",     "Salmonella"),
+        # 5 STRESS rows
+        ("SAMN00000001", "emrE",       "STRESS", "BIOCIDE", 100.0, 96.36, "BLASTX", "EFFLUX", "EFFLUX", "Escherichia coli",      "Escherichia"),
+        ("SAMN00000001", "fieF",       "STRESS", "METAL",   100.0, 97.67, "BLASTX", "",       "",       "Escherichia coli",      "Escherichia"),
+        ("SAMN00000002", "emrE",       "STRESS", "BIOCIDE", 100.0, 96.36, "BLASTX", "EFFLUX", "EFFLUX", "Escherichia coli",      "Escherichia"),
+        ("SAMN00000002", "fieF",       "STRESS", "METAL",    95.0, 97.67, "BLASTX", "",       "",       "Escherichia coli",      "Escherichia"),
+        ("SAMN00000003", "emrE",       "STRESS", "BIOCIDE",  85.0, 96.36, "BLASTX", "EFFLUX", "EFFLUX", "Staphylococcus aureus", "Staphylococcus"),
+    ]
+
+    n = len(base_rows)
+    names               = [r[0] for r in base_rows]
+    gene_symbols        = [r[1] for r in base_rows]
+    types               = [r[2] for r in base_rows]
+    subtypes            = [r[3] for r in base_rows]
+    coverages           = [r[4] for r in base_rows]
+    identities          = [r[5] for r in base_rows]
+    methods             = [r[6] for r in base_rows]
+    classes             = [r[7] for r in base_rows]
+    subclasses          = [r[8] for r in base_rows]
+    species             = [r[9] for r in base_rows]
+    genera              = [r[10] for r in base_rows]
+
+    # Synthesise the remaining 15 columns deterministically so callers can
+    # verify they round-trip through the schema. Realistic-ish values:
+    #   - Protein id / Contig id: NCBI-style accessions
+    #   - Start / Stop / Strand: contiguous coordinates on alternating strands
+    #   - Element name: human-readable copy of the gene
+    #   - Scope: the AMRFP "core" scope is used for everything we ship
+    #   - Target / reference / alignment lengths: monotonically increasing
+    #   - Closest reference accession + name: AMRFP refgene-style placeholders
+    #   - HMM accession + description: NF/HMM placeholders
+    #   - Hierarchy node: lowercased gene symbol (matches AMRFP convention)
+    protein_ids = [f"WP_{1000000 + i:09d}.1" for i in range(n)]
+    contig_ids = [f"contig_{i + 1:03d}" for i in range(n)]
+    starts = [1000 + i * 1000 for i in range(n)]
+    stops = [s + 800 for s in starts]
+    strands = ["+" if i % 2 == 0 else "-" for i in range(n)]
+    element_names = [f"{gene} resistance protein" for gene in gene_symbols]
+    scopes = ["core"] * n
+    target_lengths = [800 + i * 5 for i in range(n)]
+    ref_seq_lengths = [810 + i * 5 for i in range(n)]
+    alignment_lengths = [780 + i * 5 for i in range(n)]
+    closest_accessions = [f"REF_{i + 1:04d}" for i in range(n)]
+    closest_names = [f"{gene} reference" for gene in gene_symbols]
+    hmm_accessions = [f"NF{i + 1:06d}.1" if i % 2 == 0 else "" for i in range(n)]
+    hmm_descriptions = [
+        f"{gene} HMM" if acc else ""
+        for gene, acc in zip(gene_symbols, hmm_accessions)
+    ]
+    hierarchy_nodes = [gene.lower() for gene in gene_symbols]
+
+    table = pa.table(
+        {
+            "Name":                        ls(names),
+            "Protein id":                  ls(protein_ids),
+            "Contig id":                   ls(contig_ids),
+            "Start":                       pa.array(starts, type=pa.int64()),
+            "Stop":                        pa.array(stops, type=pa.int64()),
+            "Strand":                      ls(strands),
+            "Element symbol":              ls(gene_symbols),
+            "Element name":                ls(element_names),
+            "Scope":                       ls(scopes),
+            "Type":                        ls(types),
+            "Subtype":                     ls(subtypes),
+            "Class":                       ls(classes),
+            "Subclass":                    ls(subclasses),
+            "Method":                      ls(methods),
+            "Target length":               pa.array(target_lengths, type=pa.int64()),
+            "Reference sequence length":   pa.array(ref_seq_lengths, type=pa.int64()),
+            "% Coverage of reference":     pa.array(coverages, type=pa.float64()),
+            "% Identity to reference":     pa.array(identities, type=pa.float64()),
+            "Alignment length":            pa.array(alignment_lengths, type=pa.int64()),
+            "Closest reference accession": ls(closest_accessions),
+            "Closest reference name":      ls(closest_names),
+            "HMM accession":               ls(hmm_accessions),
+            "HMM description":             ls(hmm_descriptions),
+            "Hierarchy node":              ls(hierarchy_nodes),
+            "genus":                       ls(genera),
+            "species":                     ls(species),
+        }
+    )
+    pq.write_table(table, OUTPUT_DIR / "amrfinderplus.parquet")
+    print(f"amrfinderplus.parquet: {len(table)} rows")
+
+
 if __name__ == "__main__":
     generate_assembly()
     generate_assembly_stats()
@@ -423,4 +534,5 @@ if __name__ == "__main__":
     generate_run()
     generate_ena()
     generate_mlst()
+    generate_amrfinderplus()
     print(f"\nAll fixtures written to {OUTPUT_DIR}")
