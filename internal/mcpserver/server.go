@@ -112,6 +112,22 @@ func textResult(v any) (*mcp.CallToolResult, any, error) {
 	}, nil, nil
 }
 
+// splitMCPCSV trims and splits a comma-separated MCP input value, dropping empty entries.
+func splitMCPCSV(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 func errorResult(msg string) (*mcp.CallToolResult, any, error) {
 	return &mcp.CallToolResult{
 		IsError: true,
@@ -168,7 +184,8 @@ func makeQueryHandler(dataDir string) mcp.ToolHandlerFor[queryInput, any] {
 // --- atb_amr ---
 
 type amrInput struct {
-	Species     string `json:"species,omitempty"        jsonschema:"Species name(s), comma-separated. Optional when gene or drug_class is given."`
+	Species     string `json:"species,omitempty"        jsonschema:"Full species name(s) for an exact match, e.g. 'Escherichia coli'. Comma-separated for multiple. Optional when gene, drug_class, or genus is given."`
+	Genus       string `json:"genus,omitempty"          jsonschema:"Genus name(s) for a broader match, e.g. 'Escherichia'. Comma-separated for multiple."`
 	DrugClass   string `json:"drug_class,omitempty"     jsonschema:"Filter by drug class (case-insensitive substring)"`
 	Gene        string `json:"gene,omitempty"           jsonschema:"Filter by gene symbol (supports % wildcards)"`
 	ElementType string `json:"element_type,omitempty"   jsonschema:"Type: amr, stress, virulence, or all (default: amr)"`
@@ -178,24 +195,27 @@ type amrInput struct {
 
 func makeAMRHandler(dataDir string) mcp.ToolHandlerFor[amrInput, any] {
 	return func(ctx context.Context, req *mcp.CallToolRequest, in amrInput) (*mcp.CallToolResult, any, error) {
-		// Parse species into genera (supports comma-separated)
-		var genera []string
-		if in.Species != "" {
-			for _, sp := range strings.Split(in.Species, ",") {
-				sp = strings.TrimSpace(sp)
-				if sp == "" {
-					continue
-				}
-				parts := strings.Fields(sp)
-				if len(parts) == 0 {
-					continue
-				}
-				genera = append(genera, parts[0])
+		speciesList := splitMCPCSV(in.Species)
+		explicitGenera := splitMCPCSV(in.Genus)
+
+		generaSet := make(map[string]struct{}, len(speciesList)+len(explicitGenera))
+		for _, sp := range speciesList {
+			parts := strings.Fields(sp)
+			if len(parts) == 0 {
+				continue
 			}
+			generaSet[parts[0]] = struct{}{}
+		}
+		for _, g := range explicitGenera {
+			generaSet[g] = struct{}{}
+		}
+		genera := make([]string, 0, len(generaSet))
+		for g := range generaSet {
+			genera = append(genera, g)
 		}
 
 		if len(genera) == 0 && in.Gene == "" && in.DrugClass == "" {
-			return errorResult("species is required (or provide gene/drug_class to search across all genera)")
+			return errorResult("species, genus, gene, or drug_class is required")
 		}
 
 		elementType := in.ElementType
@@ -219,6 +239,7 @@ func makeAMRHandler(dataDir string) mcp.ToolHandlerFor[amrInput, any] {
 			GenePattern: in.Gene,
 			ElementType: elementType,
 			Genera:      genera,
+			Species:     speciesList,
 			Limit:       limit,
 		}
 
@@ -228,21 +249,44 @@ func makeAMRHandler(dataDir string) mcp.ToolHandlerFor[amrInput, any] {
 			if err != nil {
 				return errorResult(fmt.Sprintf("failed to open index for HQ filter: %v", err))
 			}
-			rows, err := db.Query(idx.QueryParams{
-				Species: in.Species,
-				HQOnly:  true,
-				Limit:   0,
-			})
-			db.Close()
-			if err != nil {
-				return errorResult(fmt.Sprintf("HQ filter query failed: %v", err))
+
+			// idx.QueryParams takes one species/genus at a time, so we union
+			// across the list. If only gene/drug_class were given, run once
+			// with no taxon filter.
+			type idxCall struct {
+				species string
+				genus   string
 			}
-			hqSet := make(map[string]struct{}, len(rows))
-			for _, r := range rows {
-				if acc := r["sample_accession"]; acc != "" {
-					hqSet[acc] = struct{}{}
+			var calls []idxCall
+			for _, sp := range speciesList {
+				calls = append(calls, idxCall{species: sp})
+			}
+			for _, g := range explicitGenera {
+				calls = append(calls, idxCall{genus: g})
+			}
+			if len(calls) == 0 {
+				calls = []idxCall{{}}
+			}
+
+			hqSet := make(map[string]struct{})
+			for _, c := range calls {
+				rows, qErr := db.Query(idx.QueryParams{
+					Species: c.species,
+					Genus:   c.genus,
+					HQOnly:  true,
+					Limit:   0,
+				})
+				if qErr != nil {
+					db.Close()
+					return errorResult(fmt.Sprintf("HQ filter query failed: %v", qErr))
+				}
+				for _, r := range rows {
+					if acc := r["sample_accession"]; acc != "" {
+						hqSet[acc] = struct{}{}
+					}
 				}
 			}
+			db.Close()
 			filters.Samples = hqSet
 		}
 

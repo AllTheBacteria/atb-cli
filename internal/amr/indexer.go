@@ -277,6 +277,14 @@ func buildSQL(f Filters) (string, []any) {
 		clauses = append(clauses, "UPPER(element_type) = UPPER(?)")
 		args = append(args, f.ElementType)
 	}
+	if len(f.Species) > 0 {
+		placeholders := make([]string, len(f.Species))
+		for i, s := range f.Species {
+			placeholders[i] = "?"
+			args = append(args, strings.ToLower(s))
+		}
+		clauses = append(clauses, "LOWER(species) IN ("+strings.Join(placeholders, ",")+")")
+	}
 
 	q := `SELECT name, gene_symbol, element_type, element_subtype,
 	       coverage, identity, method, class, subclass, species, genus

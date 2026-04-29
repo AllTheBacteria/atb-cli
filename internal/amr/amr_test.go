@@ -1,12 +1,61 @@
 package amr_test
 
 import (
+	"fmt"
+	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
+	parquetgo "github.com/parquet-go/parquet-go"
+
 	"github.com/allthebacteria/atb-cli/internal/amr"
+	pq "github.com/allthebacteria/atb-cli/internal/parquet"
 )
+
+type amrFixtureRow struct {
+	species string
+	genus   string
+	count   int
+}
+
+func writeAMRFixture(t *testing.T, dir string, rows []amrFixtureRow) {
+	t.Helper()
+	path := filepath.Join(dir, amr.AMRFileName)
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("create fixture parquet: %v", err)
+	}
+	defer f.Close()
+
+	w := parquetgo.NewGenericWriter[pq.AMRRow](f)
+	var idx int
+	for _, r := range rows {
+		for i := 0; i < r.count; i++ {
+			row := pq.AMRRow{
+				Name:           fmt.Sprintf("SAMN%08d", idx),
+				GeneSymbol:     fmt.Sprintf("gene_%d", idx),
+				ElementType:    "AMR",
+				ElementSubtype: "AMR",
+				Coverage:       100,
+				Identity:       100,
+				Method:         "EXACT",
+				Class:          "BETA-LACTAM",
+				Subclass:       "BETA-LACTAM",
+				Species:        r.species,
+				Genus:          r.genus,
+			}
+			if _, err := w.Write([]pq.AMRRow{row}); err != nil {
+				t.Fatalf("write fixture row: %v", err)
+			}
+			idx++
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("close fixture writer: %v", err)
+	}
+}
 
 func fixturesDir(t *testing.T) string {
 	t.Helper()
@@ -249,6 +298,75 @@ func TestQueryMultipleGenera(t *testing.T) {
 		if r.Genus != "Escherichia" && r.Genus != "Staphylococcus" {
 			t.Errorf("unexpected genus %q in results", r.Genus)
 		}
+	}
+}
+
+func TestQueryFilterBySpeciesIsNarrowerThanGenus(t *testing.T) {
+	// Build a fixture with two species under the same genus so we can
+	// confirm a species filter returns a strict subset of the genus filter.
+	dir := t.TempDir()
+	writeAMRFixture(t, dir, []amrFixtureRow{
+		{species: "Acinetobacter baumannii", genus: "Acinetobacter", count: 5},
+		{species: "Acinetobacter radioresistens", genus: "Acinetobacter", count: 3},
+		{species: "Klebsiella pneumoniae", genus: "Klebsiella", count: 2},
+	})
+
+	genusResults, err := amr.Query(dir, amr.Filters{
+		Genera: []string{"Acinetobacter"},
+	})
+	if err != nil {
+		t.Fatalf("Query genus: %v", err)
+	}
+	if len(genusResults) != 8 {
+		t.Fatalf("expected 8 genus results, got %d", len(genusResults))
+	}
+
+	speciesResults, err := amr.Query(dir, amr.Filters{
+		Species: []string{"Acinetobacter baumannii"},
+	})
+	if err != nil {
+		t.Fatalf("Query species: %v", err)
+	}
+	if len(speciesResults) != 5 {
+		t.Errorf("expected 5 results for Acinetobacter baumannii, got %d", len(speciesResults))
+	}
+	for _, r := range speciesResults {
+		if r.Species != "Acinetobacter baumannii" {
+			t.Errorf("unexpected species %q", r.Species)
+		}
+	}
+
+	multiSpecies, err := amr.Query(dir, amr.Filters{
+		Species: []string{"Acinetobacter baumannii", "Klebsiella pneumoniae"},
+	})
+	if err != nil {
+		t.Fatalf("Query multi species: %v", err)
+	}
+	if len(multiSpecies) != 7 {
+		t.Errorf("expected 7 results for two species, got %d", len(multiSpecies))
+	}
+}
+
+func TestQueryFilterBySpeciesCaseInsensitive(t *testing.T) {
+	all, err := amr.Query(fixturesDir(t), amr.Filters{})
+	if err != nil {
+		t.Fatalf("Query all: %v", err)
+	}
+	if len(all) == 0 {
+		t.Skip("empty fixture")
+	}
+	target := all[0].Species
+	if target == "" {
+		t.Skip("fixture row has empty species")
+	}
+	results, err := amr.Query(fixturesDir(t), amr.Filters{
+		Species: []string{strings.ToUpper(target)},
+	})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if len(results) == 0 {
+		t.Errorf("expected case-insensitive species match to return results")
 	}
 }
 

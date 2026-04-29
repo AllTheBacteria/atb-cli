@@ -21,6 +21,7 @@ import (
 func newAMRCmd() *cobra.Command {
 	var (
 		species     string
+		genus       string
 		elementType string
 		class       string
 		gene        string
@@ -48,8 +49,9 @@ func newAMRCmd() *cobra.Command {
 		Short: "Query AMR gene data",
 		Long: `Query AMRFinderPlus gene hits from the merged amrfinderplus.parquet file.
 
-Use --species to filter by one or more species (comma-separated).
-When --species is omitted, all genera are scanned (requires --gene or --class).
+Use --species for a full-species match (e.g. "Escherichia coli"), or --genus
+for a broader genus-level match (e.g. "Escherichia"). Both accept comma-
+separated lists and may be combined.
 
 Run 'atb fetch' to download the data before querying.`,
 		Example: `  # Get AMR gene hits for E. coli (HQ only)
@@ -101,25 +103,31 @@ Run 'atb fetch' to download the data before querying.`,
 				dir = cfg.General.DataDir
 			}
 
-			// Parse species into genera (supports comma-separated)
-			var genera []string
-			if species != "" {
-				for _, sp := range strings.Split(species, ",") {
-					sp = strings.TrimSpace(sp)
-					if sp == "" {
-						continue
-					}
-					g := pq.GenusFromSpecies(sp)
-					if g == "" {
-						return fmt.Errorf("could not derive genus from species %q", sp)
-					}
-					genera = append(genera, g)
+			speciesList := splitCSV(species)
+			explicitGenera := splitCSV(genus)
+
+			// Derive partition genera from species (first whitespace-separated token).
+			// These are unioned with explicit --genus values so we know which
+			// partition files / SQLite indexes to read.
+			generaSet := make(map[string]struct{}, len(speciesList)+len(explicitGenera))
+			for _, sp := range speciesList {
+				g := pq.GenusFromSpecies(sp)
+				if g == "" {
+					return fmt.Errorf("could not derive genus from species %q", sp)
 				}
+				generaSet[g] = struct{}{}
+			}
+			for _, g := range explicitGenera {
+				generaSet[g] = struct{}{}
+			}
+			genera := make([]string, 0, len(generaSet))
+			for g := range generaSet {
+				genera = append(genera, g)
 			}
 
-			// Require either --species or --gene/--class to avoid accidental full scans
+			// Require either --species/--genus or --gene/--class to avoid accidental full scans
 			if len(genera) == 0 && gene == "" && class == "" {
-				return fmt.Errorf("--species is required (or use --gene/--class to search across all genera)")
+				return fmt.Errorf("--species or --genus is required (or use --gene/--class to search across all genera)")
 			}
 
 			// Check if amrfinderplus.parquet exists
@@ -145,16 +153,23 @@ Run 'atb fetch' to download the data before querying.`,
 			if hqOnly {
 				fmt.Fprintf(os.Stderr, "Loading HQ sample set...\n")
 				assemblyPath := filepath.Join(dir, "assembly.parquet")
-				generaSet := make(map[string]bool, len(genera))
+				lowerGenera := make(map[string]bool, len(genera))
 				for _, g := range genera {
-					generaSet[strings.ToLower(g)] = true
+					lowerGenera[strings.ToLower(g)] = true
+				}
+				lowerSpecies := make(map[string]bool, len(speciesList))
+				for _, s := range speciesList {
+					lowerSpecies[strings.ToLower(s)] = true
 				}
 				hqRows, hqErr := pq.ReadStreamFiltered[pq.AssemblyRow](assemblyPath, func(r pq.AssemblyRow) bool {
 					if r.HQFilter != "PASS" {
 						return false
 					}
-					if len(generaSet) > 0 {
-						return generaSet[strings.ToLower(pq.GenusFromSpecies(r.SylphSpecies))]
+					if len(lowerSpecies) > 0 {
+						return lowerSpecies[strings.ToLower(r.SylphSpecies)]
+					}
+					if len(lowerGenera) > 0 {
+						return lowerGenera[strings.ToLower(pq.GenusFromSpecies(r.SylphSpecies))]
 					}
 					return true
 				}, 0)
@@ -198,6 +213,7 @@ Run 'atb fetch' to download the data before querying.`,
 				MinIdentity: minIdentity,
 				ElementType: elementType,
 				Genera:      genera,
+				Species:     speciesList,
 				Limit:       limit,
 			}
 
@@ -276,7 +292,8 @@ Run 'atb fetch' to download the data before querying.`,
 		},
 	}
 
-	cmd.Flags().StringVar(&species, "species", "", "species to query (comma-separated for multiple)")
+	cmd.Flags().StringVar(&species, "species", "", "filter by full species name, e.g. \"Escherichia coli\" (comma-separated for multiple)")
+	cmd.Flags().StringVar(&genus, "genus", "", "filter by genus, e.g. \"Escherichia\" (comma-separated for multiple)")
 	cmd.Flags().StringVar(&elementType, "type", "", "element type: amr (default), stress, virulence, all")
 	cmd.Flags().StringVar(&class, "class", "", "filter by drug class (case-insensitive, substring match)")
 	cmd.Flags().StringVar(&gene, "gene", "", "filter by gene symbol (supports % wildcards)")
@@ -297,6 +314,22 @@ Run 'atb fetch' to download the data before querying.`,
 	cmd.Flags().IntVar(&maxSamples, "max-samples", 0, "limit number of assemblies to download")
 
 	return cmd
+}
+
+// splitCSV trims and splits a comma-separated flag value, dropping empty entries.
+func splitCSV(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // amrColumns returns the fixed column order for AMR output. When withENA is

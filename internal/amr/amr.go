@@ -29,6 +29,10 @@ type Filters struct {
 	// Genera restricts results to specific bacterial genera (case-insensitive).
 	// Nil or empty means all genera (full scan).
 	Genera []string
+	// Species restricts results to specific full species names, e.g. "Escherichia coli"
+	// (case-insensitive exact match against the row's Species field).
+	// Nil or empty means no species-level restriction.
+	Species []string
 	// Limit caps the number of returned results. 0 means no limit.
 	Limit int
 }
@@ -189,15 +193,18 @@ func matchesFilters(row pq.AMRRow, f Filters) bool {
 			return false
 		}
 	}
-	if len(f.Genera) > 0 && !matchesAnyGenus(row.Genus, f.Genera) {
+	if len(f.Genera) > 0 && !matchesAny(row.Genus, f.Genera) {
+		return false
+	}
+	if len(f.Species) > 0 && !matchesAny(row.Species, f.Species) {
 		return false
 	}
 	return true
 }
 
-func matchesAnyGenus(rowGenus string, genera []string) bool {
-	for _, g := range genera {
-		if strings.EqualFold(rowGenus, g) {
+func matchesAny(value string, candidates []string) bool {
+	for _, c := range candidates {
+		if strings.EqualFold(value, c) {
 			return true
 		}
 	}
