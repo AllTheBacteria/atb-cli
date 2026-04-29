@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
@@ -31,6 +32,7 @@ func newAMRCmd() *cobra.Command {
 		limit       int
 		format      string
 		outputFile  string
+		yes         bool
 
 		country            string
 		platform           string
@@ -52,6 +54,10 @@ func newAMRCmd() *cobra.Command {
 Use --species for a full-species match (e.g. "Escherichia coli"), or --genus
 for a broader genus-level match (e.g. "Escherichia"). Both accept comma-
 separated lists and may be combined.
+
+When no filter is given (--species, --genus, --gene, --class), the full AMR
+dataset is scanned; you'll be prompted to confirm, or pass --yes to skip the
+prompt.
 
 Run 'atb fetch' to download the data before querying.`,
 		Example: `  # Get AMR gene hits for E. coli (HQ only)
@@ -125,9 +131,11 @@ Run 'atb fetch' to download the data before querying.`,
 				genera = append(genera, g)
 			}
 
-			// Require either --species/--genus or --gene/--class to avoid accidental full scans
-			if len(genera) == 0 && gene == "" && class == "" {
-				return fmt.Errorf("--species or --genus is required (or use --gene/--class to search across all genera)")
+			hasFilter := len(speciesList) > 0 || len(explicitGenera) > 0 || gene != "" || class != ""
+			if !hasFilter && !yes {
+				if err := confirmFullAMRScan(dir, cmd.ErrOrStderr()); err != nil {
+					return err
+				}
 			}
 
 			// Check if amrfinderplus.parquet exists
@@ -312,8 +320,62 @@ Run 'atb fetch' to download the data before querying.`,
 	cmd.Flags().StringVarP(&downloadDir, "download-dir", "d", "", "directory to save downloaded assemblies (default from config)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print download URLs without downloading")
 	cmd.Flags().IntVar(&maxSamples, "max-samples", 0, "limit number of assemblies to download")
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "skip the confirmation prompt for an unfiltered full-dataset scan")
 
 	return cmd
+}
+
+// confirmFullAMRScan warns the user that no filters were given and prompts for
+// confirmation. On a non-TTY stdin, it returns an error directing them to --yes
+// so we never hang in pipelines.
+func confirmFullAMRScan(dataDir string, stderr io.Writer) error {
+	size := amrDataSize(dataDir)
+	sizeStr := "unknown size"
+	if size > 0 {
+		sizeStr = humanize.Bytes(uint64(size))
+	}
+
+	stat, _ := os.Stdin.Stat()
+	isTTY := stat != nil && stat.Mode()&os.ModeCharDevice != 0
+	if !isTTY {
+		return fmt.Errorf("no filters supplied — this would scan the full AMR dataset (%s); pass --yes to confirm, or filter with --species/--genus/--gene/--class", sizeStr)
+	}
+
+	fmt.Fprintf(stderr, "No filters supplied. This will scan the full AMR dataset (~%s).\n", sizeStr)
+	fmt.Fprintf(stderr, "Continue? [y/N]: ")
+	reader := bufio.NewReader(os.Stdin)
+	input, _ := reader.ReadString('\n')
+	choice := strings.TrimSpace(strings.ToLower(input))
+	if choice != "y" && choice != "yes" {
+		return fmt.Errorf("aborted")
+	}
+	return nil
+}
+
+// amrDataSize returns the on-disk size of the AMR data — either the partition
+// directory if present, or the monolithic parquet. Returns 0 if neither exists.
+func amrDataSize(dataDir string) int64 {
+	partDir := filepath.Join(dataDir, amr.PartitionDir)
+	if entries, err := os.ReadDir(partDir); err == nil {
+		var total int64
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			info, err := e.Info()
+			if err != nil {
+				continue
+			}
+			total += info.Size()
+		}
+		if total > 0 {
+			return total
+		}
+	}
+	if info, err := os.Stat(filepath.Join(dataDir, amr.AMRFileName)); err == nil {
+		return info.Size()
+	}
+	return 0
 }
 
 // splitCSV trims and splits a comma-separated flag value, dropping empty entries.
