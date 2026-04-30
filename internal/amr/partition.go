@@ -21,6 +21,8 @@ const PartitionDir = "amr"
 // own partition file. Genera below this threshold are grouped into _other.parquet.
 const PartitionThreshold = 10_000
 
+const partitionRowGroupSize = 100_000
+
 const otherPartition = "_other"
 
 // BuildPartitions reads the monolithic amrfinderplus.parquet and writes per-genus
@@ -200,7 +202,7 @@ func newGenusWriter(dir, name string) (*genusWriter, error) {
 	}
 	return &genusWriter{
 		file:   f,
-		writer: parquetgo.NewGenericWriter[pq.AMRRow](f),
+		writer: parquetgo.NewGenericWriter[pq.AMRRow](f, parquetgo.MaxRowsPerRowGroup(partitionRowGroupSize)),
 		buf:    make([]pq.AMRRow, 0, 512),
 	}, nil
 }
