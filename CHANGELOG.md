@@ -2,6 +2,21 @@
 
 All notable changes to `atb-cli` are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [v0.14.1](https://github.com/allthebacteria/atb-cli/releases/tag/v0.14.1) - 2026-04-30
+
+### Performance
+
+- **AMR index build now streams rows from parquet into SQLite** instead of loading the full per-genus partition into memory first. Combined with `journal_mode=OFF` + in-memory temp store during the build (the `.tmp`→final rename keeps crash safety), peak heap during partition→SQLite conversion drops from O(partition size) to O(buffer ≈ 512 rows). Large genera that previously needed multiple GB now run in tens of MB.
+- **Per-genus partition writers cap row groups at 100k rows** (`parquet-go` `MaxRowsPerRowGroup`). The previous unlimited default kept all compressed pages of every open writer in memory until close, which was the dominant cost during `atb fetch --tables amrfinderplus.parquet`. Each writer now flushes a row group to disk every 100k rows.
+
+### Fixed
+
+- Stale-data errors from `atb amr` now suggest `atb fetch --tables amrfinderplus.parquet --force --yes` instead of a bare `atb fetch --force`. The previous suggestion re-downloaded every core table (~hundreds of MB to GBs of unrelated assembly/checkm2/mlst data) when only the AMR artifact was stale.
+
+### Added
+
+- `BenchmarkBuildOneIndex` and `BenchmarkBuildOneIndexPeakRSS` in `internal/amr` track allocs/op and peak heap during a 1M-row build, so future memory regressions in the streamed indexer surface in CI bench output.
+
 ## [v0.14.0](https://github.com/allthebacteria/atb-cli/releases/tag/v0.14.0) - 2026-04-29
 
 ### Changed
