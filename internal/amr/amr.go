@@ -134,8 +134,9 @@ func checkAMRParquet(path string) error {
 		}
 	}
 	return fmt.Errorf("AMR data at %s uses an older AMRFinderPlus schema "+
-		"(missing %q column). Run 'atb fetch --force' to download the "+
-		"AMRFinderPlus v4.2.5 dataset.", filepath.Base(path), v4SchemaMarker)
+		"(missing %q column). Run 'atb fetch --tables amrfinderplus.parquet "+
+		"--force --yes' to download the AMRFinderPlus v4.2.5 dataset and "+
+		"rebuild its indexes.", filepath.Base(path), v4SchemaMarker)
 }
 
 func queryWithIndexes(dataDir string, filters Filters) ([]Result, error) {

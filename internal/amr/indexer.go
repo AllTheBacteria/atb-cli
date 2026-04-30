@@ -425,6 +425,7 @@ func wrapStaleIndexError(dbPath string, err error) error {
 		return err
 	}
 	return fmt.Errorf("AMR SQLite index %s appears stale (built from an older "+
-		"AMRFinderPlus schema): %w. Run 'atb fetch --force' to rebuild.",
+		"AMRFinderPlus schema): %w. Run 'atb fetch --tables amrfinderplus.parquet "+
+		"--force --yes' to refresh the AMR dataset and rebuild its indexes.",
 		filepath.Base(dbPath), err)
 }
