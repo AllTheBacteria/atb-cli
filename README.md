@@ -66,9 +66,27 @@ This detects your OS and architecture, downloads the latest release, and install
 # Install a specific version
 ATB_VERSION=v0.1.0 curl -fsSL https://raw.githubusercontent.com/allthebacteria/atb-cli/main/install.sh | bash
 
-# Install to a custom directory
+# Install the binary to a custom directory
 ATB_INSTALL_DIR=~/.local/bin curl -fsSL https://raw.githubusercontent.com/allthebacteria/atb-cli/main/install.sh | bash
 ```
+
+> **Heads up — pick a data directory before fetching.** `ATB_INSTALL_DIR` only controls where the `atb` binary lands, not where the database goes. A default `atb fetch` pulls the core parquet tables (~600 MB) **and** builds the per-genus AMR indexes, which expand to **~35 GB** on disk. Add another ~4.2 GB if you run `atb sketch fetch`. By default everything goes to `~/.local/share/atb/data`, which is often on a small home volume. To put it elsewhere, either pass `--data-dir` per command or set it once:
+>
+> ```bash
+> atb config set general.data_dir /path/to/large/volume
+> # or, ad hoc:
+> atb fetch --data-dir /path/to/large/volume
+> ```
+>
+> If you don't need AMR queries, you can skip that table to save the ~35 GB. `atb fetch` will prompt before downloading `amrfinderplus.parquet`; answer **n** to skip just that table and continue with the rest. To bypass the prompt non-interactively, either pre-select tables or pass `--yes`:
+>
+> ```bash
+> # Skip AMR explicitly (non-interactive)
+> atb fetch --tables assembly.parquet,assembly_stats.parquet,checkm2.parquet,sylph.parquet,run.parquet,mlst.parquet
+>
+> # Or accept the AMR download without prompting
+> atb fetch --yes
+> ```
 
 **Windows:** Download the `.zip` from the [Download](#download) table above, extract, and add `atb.exe` to your PATH.
 
@@ -671,7 +689,7 @@ Queries are effectively instant after `atb fetch` builds the indexes.
 | AMR cross-genus gene search (`atb amr --gene ... --limit 100`) | ~2ms | 3 MB |
 | Genome download (50 files, parallel=4) | 3.8s | 18 MB |
 
-Post-fetch index build: ~8-11 minutes (one-time). Disk: ~3.5 GB typical install.
+Post-fetch index build: ~8-11 minutes (one-time). Disk: ~35 GB for the default install (core parquet + per-genus AMR indexes); skip `amrfinderplus.parquet` via `--tables` if you don't need AMR queries.
 
 Full benchmark details, methodology, and comparisons across query tiers: **[docs/BENCHMARKS.md](docs/BENCHMARKS.md)**
 
