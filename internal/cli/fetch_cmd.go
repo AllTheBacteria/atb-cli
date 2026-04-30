@@ -32,8 +32,9 @@ func newFetchCmd() *cobra.Command {
 		Long: `Download parquet metadata tables from AllTheBacteria.
 
 By default the core tables are downloaded, which includes amrfinderplus.parquet.
-After downloading, you'll be prompted to build query indexes for faster queries.
-Use --yes to skip the prompt and build automatically.
+Note: AMR data is ~1.2 GB to download but expands to ~35 GB of per-genus indexes,
+so you'll be prompted to confirm before download and again before index build.
+Use --yes to skip both prompts and proceed automatically.
 
 Use --all to download all available tables.
 Use --tables to specify exact tables by name.`,
@@ -90,6 +91,17 @@ Use --tables to specify exact tables by name.`,
 			for _, name := range targets {
 				if _, ok := fetch.URLForTable(name); !ok {
 					return fmt.Errorf("unknown table %q; run 'atb fetch --all' to see available tables", name)
+				}
+			}
+
+			if containsTable(targets, amr.AMRFileName) && !yes {
+				if !promptAMRDiskUsage() {
+					targets = removeTable(targets, amr.AMRFileName)
+					fmt.Fprintf(os.Stderr, "Skipping %s. AMR queries will not work without it.\n", amr.AMRFileName)
+					if len(targets) == 0 {
+						fmt.Fprintf(os.Stderr, "No tables left to fetch.\n")
+						return nil
+					}
 				}
 			}
 
@@ -173,6 +185,44 @@ Use --tables to specify exact tables by name.`,
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "build indexes without prompting")
 
 	return cmd
+}
+
+func containsTable(tables []string, name string) bool {
+	for _, t := range tables {
+		if t == name {
+			return true
+		}
+	}
+	return false
+}
+
+func removeTable(tables []string, name string) []string {
+	out := tables[:0]
+	for _, t := range tables {
+		if t != name {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+func promptAMRDiskUsage() bool {
+	stat, _ := os.Stdin.Stat()
+	interactive := stat.Mode()&os.ModeCharDevice != 0
+	if !interactive {
+		return true // non-interactive (scripts/CI) → proceed
+	}
+
+	fmt.Fprintf(os.Stderr, "Note: amrfinderplus.parquet is ~1.2 GB to download, but during indexing\n")
+	fmt.Fprintf(os.Stderr, "it expands to per-genus partitions and SQLite indexes totaling ~35 GB.\n")
+	fmt.Fprintf(os.Stderr, "Make sure your data directory has enough free space.\n")
+	fmt.Fprintf(os.Stderr, "Continue? [Y/n]: ")
+
+	reader := bufio.NewReader(os.Stdin)
+	input, _ := reader.ReadString('\n')
+	choice := strings.TrimSpace(strings.ToLower(input))
+
+	return choice == "" || choice == "y" || choice == "yes"
 }
 
 func promptBuildIndexes() bool {
