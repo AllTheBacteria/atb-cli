@@ -137,7 +137,7 @@ docker run -d \
 | Disk | 3 GB | 5 GB |
 | Network | Outbound to osf.io (first run only) | |
 
-Queries use ~15 MB RAM each (SQLite indexed lookups). The 2 GB recommendation is for the index build step, which is memory-intensive but only runs once.
+Queries use ~15 MB RAM each (SQLite indexed lookups). The index build step streams parquet rows row-by-row into SQLite and caps per-genus parquet row groups at 100k rows, so peak RSS during build typically stays a few hundred MB even on the 58M-row AMR table; the 2 GB recommendation is comfortable headroom.
 
 ## Health Check
 
