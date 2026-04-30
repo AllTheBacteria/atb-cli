@@ -3,6 +3,7 @@ package amr
 import (
 	"database/sql"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -11,6 +12,8 @@ import (
 	"time"
 
 	_ "modernc.org/sqlite"
+
+	parquetgo "github.com/parquet-go/parquet-go"
 
 	pq "github.com/allthebacteria/atb-cli/internal/parquet"
 )
@@ -130,7 +133,7 @@ func buildOneIndex(parquetPath, sqlitePath string) (int64, error) {
 	tmpPath := sqlitePath + ".tmp"
 	_ = os.Remove(tmpPath)
 
-	db, err := sql.Open("sqlite", tmpPath+"?_journal_mode=WAL&_synchronous=OFF")
+	db, err := sql.Open("sqlite", tmpPath+"?_journal_mode=OFF&_synchronous=OFF&_cache_size=-65536&_temp_store=MEMORY")
 	if err != nil {
 		return 0, err
 	}
@@ -140,59 +143,109 @@ func buildOneIndex(parquetPath, sqlitePath string) (int64, error) {
 		return 0, fmt.Errorf("creating schema: %w", err)
 	}
 
-	rows, err := pq.ReadAll[pq.AMRRow](parquetPath)
+	f, err := os.Open(parquetPath)
 	if err != nil {
-		return 0, fmt.Errorf("reading parquet: %w", err)
+		return 0, fmt.Errorf("opening parquet: %w", err)
+	}
+	defer f.Close()
+
+	r := parquetgo.NewGenericReader[pq.AMRRow](f)
+	defer r.Close()
+
+	buf := make([]pq.AMRRow, 512)
+
+	var (
+		tx    *sql.Tx
+		stmt  *sql.Stmt
+		count int64
+		batch int64
+	)
+
+	rollback := func() {
+		if stmt != nil {
+			_ = stmt.Close()
+			stmt = nil
+		}
+		if tx != nil {
+			_ = tx.Rollback()
+			tx = nil
+		}
 	}
 
-	count := int64(len(rows))
-
-	for start := 0; start < len(rows); start += amrBatchSize {
-		end := start + amrBatchSize
-		if end > len(rows) {
-			end = len(rows)
-		}
-
-		tx, err := db.Begin()
+	openBatch := func() error {
+		var err error
+		tx, err = db.Begin()
 		if err != nil {
-			return 0, err
+			return err
 		}
-
-		stmt, err := tx.Prepare(amrInsert)
+		stmt, err = tx.Prepare(amrInsert)
 		if err != nil {
 			_ = tx.Rollback()
-			return 0, err
+			tx = nil
+			return err
 		}
-
-		for i := start; i < end; i++ {
-			r := rows[i]
-			if _, err := stmt.Exec(
-				r.Name, r.ProteinID, r.ContigID,
-				r.Start, r.Stop, r.Strand,
-				r.GeneSymbol, r.ElementName, r.Scope,
-				r.ElementType, r.ElementSubtype,
-				r.Class, r.Subclass, r.Method,
-				r.TargetLength, r.ReferenceSequenceLength,
-				r.Coverage, r.Identity, r.AlignmentLength,
-				r.ClosestReferenceAccession, r.ClosestReferenceName,
-				r.HMMAccession, r.HMMDescription, r.HierarchyNode,
-				r.Genus, r.Species,
-			); err != nil {
-				_ = stmt.Close()
-				_ = tx.Rollback()
-				return 0, err
-			}
-		}
-
-		_ = stmt.Close()
-		if err := tx.Commit(); err != nil {
-			return 0, err
-		}
+		return nil
 	}
 
-	if _, err := db.Exec("PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
+	commitBatch := func() error {
+		_ = stmt.Close()
+		stmt = nil
+		if err := tx.Commit(); err != nil {
+			tx = nil
+			return err
+		}
+		tx = nil
+		batch = 0
+		return nil
+	}
+
+	if err := openBatch(); err != nil {
 		return 0, err
 	}
+
+	for {
+		n, readErr := r.Read(buf)
+		for i := 0; i < n; i++ {
+			row := buf[i]
+			if _, err := stmt.Exec(
+				row.Name, row.ProteinID, row.ContigID,
+				row.Start, row.Stop, row.Strand,
+				row.GeneSymbol, row.ElementName, row.Scope,
+				row.ElementType, row.ElementSubtype,
+				row.Class, row.Subclass, row.Method,
+				row.TargetLength, row.ReferenceSequenceLength,
+				row.Coverage, row.Identity, row.AlignmentLength,
+				row.ClosestReferenceAccession, row.ClosestReferenceName,
+				row.HMMAccession, row.HMMDescription, row.HierarchyNode,
+				row.Genus, row.Species,
+			); err != nil {
+				rollback()
+				return 0, err
+			}
+			count++
+			batch++
+			if batch >= amrBatchSize {
+				if err := commitBatch(); err != nil {
+					return 0, err
+				}
+				if err := openBatch(); err != nil {
+					return 0, err
+				}
+			}
+		}
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			rollback()
+			return 0, fmt.Errorf("reading parquet: %w", readErr)
+		}
+	}
+
+	if err := commitBatch(); err != nil {
+		return 0, err
+	}
+
 	if err := db.Close(); err != nil {
 		return 0, err
 	}
