@@ -2,6 +2,16 @@
 
 All notable changes to `atb-cli` are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [v0.14.2](https://github.com/allthebacteria/atb-cli/releases/tag/v0.14.2) - 2026-04-30
+
+### Added
+
+- `atb fetch` now prompts before downloading `amrfinderplus.parquet`, surfacing that the ~1.2 GB download expands to ~35 GB of per-genus partitions and SQLite indexes during the post-fetch index build. Answering **n** drops only AMR from the target list and continues fetching the other core tables, so users on small home volumes can opt out without aborting the whole download. Non-interactive runs (no TTY) and `--yes` skip the prompt.
+
+### Docs
+
+- README install section now spells out that `ATB_INSTALL_DIR` controls the binary location only, not the data directory, and documents `--data-dir` / `atb config set general.data_dir` for steering the database to a larger volume. The default-disk figure ("~3.5 GB typical install") was stale and is corrected to ~35 GB for the default install (core parquet + AMR indexes).
+
 ## [v0.14.1](https://github.com/allthebacteria/atb-cli/releases/tag/v0.14.1) - 2026-04-30
 
 ### Performance
