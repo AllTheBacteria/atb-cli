@@ -188,20 +188,32 @@ func TestQueryFallsBackToMonolithic(t *testing.T) {
 
 func TestPartitionPathNormalization(t *testing.T) {
 	dir := t.TempDir()
+	// Legionella_C is a GTDB letter-clade genus that exposed a case-folding bug:
+	// previously the lookup lowercased the suffix to Legionella_c and missed the
+	// promoted partition, silently falling back to a full monolithic scan.
 	generateTestParquet(t, dir, map[string]int{
-		"Escherichia": 15_000,
+		"Escherichia":  15_000,
+		"Legionella_C": 12_000,
 	})
 
 	if err := amr.BuildPartitions(dir, nil); err != nil {
 		t.Fatalf("BuildPartitions: %v", err)
 	}
 
-	// Case-insensitive lookup should find the partition
-	tests := []string{"Escherichia", "escherichia", "ESCHERICHIA"}
+	// Case-insensitive lookup should find the partition for both straight and
+	// suffixed genus names.
+	tests := []string{
+		"Escherichia", "escherichia", "ESCHERICHIA",
+		"Legionella_C", "legionella_c", "LEGIONELLA_C",
+	}
 	for _, genus := range tests {
 		path := amr.PartitionPath(dir, genus)
 		if path == "" {
 			t.Errorf("PartitionPath(%q) returned empty, expected a path", genus)
+		}
+		idx := amr.IndexPath(dir, genus)
+		if idx == "" {
+			t.Errorf("IndexPath(%q) returned empty, expected a path", genus)
 		}
 	}
 

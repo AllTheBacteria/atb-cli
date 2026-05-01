@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-	"unicode"
 
 	parquetgo "github.com/parquet-go/parquet-go"
 
@@ -136,12 +135,32 @@ func BuildPartitions(dataDir string, logFn func(string, ...any)) error {
 }
 
 // PartitionPath returns the path to a genus partition file if it exists.
-// Returns empty string if the partition doesn't exist.
+// Returns empty string if the partition doesn't exist. Lookup is case-
+// insensitive so that GTDB letter clades (e.g. Legionella_C) match files
+// stored under their exact source-case filename.
 func PartitionPath(dataDir, genus string) string {
-	normalized := normalizeGenus(genus)
-	path := filepath.Join(dataDir, PartitionDir, normalized+".parquet")
-	if _, err := os.Stat(path); err == nil {
-		return path
+	return findPartitionFile(filepath.Join(dataDir, PartitionDir), genus+".parquet")
+}
+
+// findPartitionFile resolves name in dir, falling back to a case-insensitive
+// directory scan if the exact name isn't present. Returns "" when no match
+// exists or the directory cannot be read.
+func findPartitionFile(dir, name string) string {
+	direct := filepath.Join(dir, name)
+	if _, err := os.Stat(direct); err == nil {
+		return direct
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return ""
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		if strings.EqualFold(e.Name(), name) {
+			return filepath.Join(dir, e.Name())
+		}
 	}
 	return ""
 }
@@ -175,16 +194,6 @@ func countByGenus(path string) (map[string]int64, int64, error) {
 	}
 
 	return counts, total, nil
-}
-
-// normalizeGenus converts a genus string to title case for partition filename matching.
-func normalizeGenus(genus string) string {
-	if genus == "" {
-		return ""
-	}
-	runes := []rune(strings.ToLower(genus))
-	runes[0] = unicode.ToUpper(runes[0])
-	return string(runes)
 }
 
 type genusWriter struct {

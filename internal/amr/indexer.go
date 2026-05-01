@@ -257,14 +257,11 @@ func buildOneIndex(parquetPath, sqlitePath string) (int64, error) {
 	return count, nil
 }
 
-// IndexPath returns the path to a genus SQLite index if it exists.
+// IndexPath returns the path to a genus SQLite index if it exists. Lookup is
+// case-insensitive so GTDB letter clades match files stored under their exact
+// source-case filename (e.g. --genus legionella_c hits Legionella_C.sqlite).
 func IndexPath(dataDir, genus string) string {
-	normalized := normalizeGenus(genus)
-	path := filepath.Join(dataDir, PartitionDir, normalized+".sqlite")
-	if _, err := os.Stat(path); err == nil {
-		return path
-	}
-	return ""
+	return findPartitionFile(filepath.Join(dataDir, PartitionDir), genus+".sqlite")
 }
 
 // QueryIndex runs a SQL query against a genus SQLite index and returns results.
