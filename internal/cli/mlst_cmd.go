@@ -192,15 +192,18 @@ func newMLSTCmd() *cobra.Command {
 
 			var w io.Writer = cmd.OutOrStdout()
 			if outputFile != "" {
-				f, ferr := os.Create(outputFile)
+				out, closeFn, ferr := output.OpenWriter(outputFile)
 				if ferr != nil {
-					return fmt.Errorf("opening output file: %w", ferr)
+					return ferr
 				}
-				defer f.Close()
-				w = f
+				defer func() { _ = closeFn() }()
+				w = out
 			}
 
 			resolvedFormat := format
+			if resolvedFormat == "" {
+				resolvedFormat = output.InferFormatFromPath(outputFile)
+			}
 			if resolvedFormat == "" {
 				resolvedFormat = "tsv"
 			}

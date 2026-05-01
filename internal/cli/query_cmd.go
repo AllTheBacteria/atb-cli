@@ -283,8 +283,12 @@ func newQueryCmd() *cobra.Command {
 				cols = output.InferColumns(outRows)
 			}
 
-			// Resolve format
+			// Format priority: --format flag (or TOML output.format) > -o
+			// filename extension > config DefaultFormat > TTY-aware default.
 			resolvedFormat := outCfg.Format
+			if resolvedFormat == "" {
+				resolvedFormat = output.InferFormatFromPath(outCfg.Output)
+			}
 			if resolvedFormat == "" {
 				resolvedFormat = cfg.General.DefaultFormat
 			}
@@ -295,12 +299,12 @@ func newQueryCmd() *cobra.Command {
 
 			var w io.Writer = cmd.OutOrStdout()
 			if outCfg.Output != "" {
-				f, err := os.Create(outCfg.Output)
+				out, closeFn, err := output.OpenWriter(outCfg.Output)
 				if err != nil {
-					return fmt.Errorf("opening output file: %w", err)
+					return err
 				}
-				defer f.Close()
-				w = f
+				defer func() { _ = closeFn() }()
+				w = out
 			}
 
 			return output.Format(w, outRows, cols, resolvedFormat)

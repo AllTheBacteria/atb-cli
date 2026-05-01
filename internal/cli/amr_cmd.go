@@ -248,8 +248,14 @@ Run 'atb fetch' to download the data before querying.`,
 			rows := amrResultsToOutputRows(results, enaLookup, wantENA)
 			cols := amrColumns(wantENA)
 
-			// Resolve output format
+			// Format priority: --format flag > -o filename extension > config
+			// DefaultFormat > TTY-aware default. The filename hint outranks
+			// DefaultFormat so a path like results.csv.gz produces CSV without
+			// needing --format csv at the call site.
 			resolvedFormat := format
+			if resolvedFormat == "" {
+				resolvedFormat = output.InferFormatFromPath(outputFile)
+			}
 			if resolvedFormat == "" {
 				resolvedFormat = cfg.General.DefaultFormat
 			}
@@ -257,12 +263,12 @@ Run 'atb fetch' to download the data before querying.`,
 
 			var w io.Writer = cmd.OutOrStdout()
 			if outputFile != "" {
-				f, err := os.Create(outputFile)
+				out, closeFn, err := output.OpenWriter(outputFile)
 				if err != nil {
-					return fmt.Errorf("opening output file: %w", err)
+					return err
 				}
-				defer f.Close()
-				w = f
+				defer func() { _ = closeFn() }()
+				w = out
 			}
 
 			if err := output.Format(w, rows, cols, resolvedFormat); err != nil {
