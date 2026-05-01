@@ -26,6 +26,8 @@ func newAMRCmd() *cobra.Command {
 		elementType string
 		class       string
 		gene        string
+		samples     []string
+		sampleFile  string
 		hqOnly      bool
 		minCoverage float64
 		minIdentity float64
@@ -74,6 +76,10 @@ Run 'atb fetch' to download the data before querying.`,
 
   # Find a gene across ALL genera (no species filter)
   atb amr --gene "blaCTX-M-15" --limit 100
+
+  # Restrict to a specific sample list (parity with 'atb query --samples')
+  atb amr --samples SAMD00093868,SAMD00093869 --type all
+  atb amr --sample-file my_samples.txt --hq-only --class "BETA-LACTAM"
 
   # Query stress response genes
   atb amr --species "Escherichia coli" --type stress
@@ -127,7 +133,8 @@ Run 'atb fetch' to download the data before querying.`,
 				genera = append(genera, g)
 			}
 
-			hasFilter := len(speciesList) > 0 || len(explicitGenera) > 0 || gene != "" || class != ""
+			hasFilter := len(speciesList) > 0 || len(explicitGenera) > 0 || gene != "" || class != "" ||
+				len(samples) > 0 || sampleFile != ""
 			if !hasFilter && !yes {
 				if err := confirmFullAMRScan(dir, cmd.ErrOrStderr()); err != nil {
 					return err
@@ -153,7 +160,15 @@ Run 'atb fetch' to download the data before querying.`,
 				}
 			}
 
+			explicitSamples, err := collectSampleAccessions(samples, sampleFile)
+			if err != nil {
+				return err
+			}
+
 			var sampleSet map[string]struct{}
+			if len(explicitSamples) > 0 {
+				sampleSet = explicitSamples
+			}
 			if hqOnly {
 				fmt.Fprintf(os.Stderr, "Loading HQ sample set...\n")
 				assemblyPath := filepath.Join(dir, "assembly.parquet")
@@ -180,10 +195,11 @@ Run 'atb fetch' to download the data before querying.`,
 				if hqErr != nil {
 					return fmt.Errorf("loading HQ samples: %w", hqErr)
 				}
-				sampleSet = make(map[string]struct{}, len(hqRows))
+				hqSet := make(map[string]struct{}, len(hqRows))
 				for _, r := range hqRows {
-					sampleSet[r.SampleAccession] = struct{}{}
+					hqSet[r.SampleAccession] = struct{}{}
 				}
+				sampleSet = intersectSampleSets(sampleSet, hqSet)
 			}
 
 			var enaLookup map[string]query.ENARecord
@@ -304,9 +320,11 @@ Run 'atb fetch' to download the data before querying.`,
 
 	cmd.Flags().StringVar(&species, "species", "", "filter by full species name, e.g. \"Escherichia coli\" (comma-separated for multiple)")
 	cmd.Flags().StringVar(&genus, "genus", "", "filter by genus, e.g. \"Escherichia\" (comma-separated for multiple)")
-	cmd.Flags().StringVar(&elementType, "type", "", "element type: amr (default), stress, virulence, all")
+	cmd.Flags().StringVar(&elementType, "type", "", "element type: amr, stress, virulence, all (default: all types)")
 	cmd.Flags().StringVar(&class, "class", "", "filter by drug class (case-insensitive, substring match)")
 	cmd.Flags().StringVar(&gene, "gene", "", "filter by gene symbol (supports % wildcards)")
+	cmd.Flags().StringSliceVar(&samples, "samples", nil, "comma-separated sample accessions to restrict the query to")
+	cmd.Flags().StringVar(&sampleFile, "sample-file", "", "file with one sample accession per line (combined with --samples)")
 	cmd.Flags().BoolVar(&hqOnly, "hq-only", false, "only include HQ samples (hq_filter=PASS)")
 	cmd.Flags().Float64Var(&minCoverage, "min-coverage", 0, "minimum coverage %")
 	cmd.Flags().Float64Var(&minIdentity, "min-identity", 0, "minimum identity %")
@@ -391,6 +409,60 @@ func splitCSV(s string) []string {
 		p = strings.TrimSpace(p)
 		if p != "" {
 			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// collectSampleAccessions builds a deduplicated set from --samples and
+// --sample-file. Returns nil when neither was supplied so callers can
+// distinguish "no restriction" from "empty restriction".
+func collectSampleAccessions(samples []string, sampleFile string) (map[string]struct{}, error) {
+	if len(samples) == 0 && sampleFile == "" {
+		return nil, nil
+	}
+	set := make(map[string]struct{}, len(samples))
+	for _, s := range samples {
+		s = strings.TrimSpace(s)
+		if s != "" {
+			set[s] = struct{}{}
+		}
+	}
+	if sampleFile != "" {
+		f, err := os.Open(sampleFile)
+		if err != nil {
+			return nil, fmt.Errorf("opening --sample-file %s: %w", sampleFile, err)
+		}
+		defer f.Close()
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			set[line] = struct{}{}
+		}
+		if err := scanner.Err(); err != nil {
+			return nil, fmt.Errorf("reading --sample-file %s: %w", sampleFile, err)
+		}
+	}
+	return set, nil
+}
+
+// intersectSampleSets returns the intersection of two sample sets. A nil
+// receiver means "no restriction" — i.e. the other set wins. When both are
+// non-nil, the result contains only samples present in both.
+func intersectSampleSets(a, b map[string]struct{}) map[string]struct{} {
+	if a == nil {
+		return b
+	}
+	if b == nil {
+		return a
+	}
+	out := make(map[string]struct{}, len(a))
+	for s := range a {
+		if _, ok := b[s]; ok {
+			out[s] = struct{}{}
 		}
 	}
 	return out
