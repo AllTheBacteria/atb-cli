@@ -2,7 +2,17 @@
 
 All notable changes to `atb-cli` are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [v0.14.2](https://github.com/allthebacteria/atb-cli/releases/tag/v0.14.2) - 2026-04-30
+## Unreleased
+
+### Added
+
+- `atb amr` now accepts `--samples` (comma-separated accessions) and `--sample-file` (one accession per line, `#` comments allowed) for parity with `atb query`. They intersect with `--hq-only` and ENA filters so combined restrictions tighten rather than override the sample set.
+- Output writers across `atb amr`, `atb query`, and `atb mlst` auto-gzip when `-o` ends in `.gz`. Format is inferred from the destination filename — `results.csv.gz` produces gzipped CSV regardless of the configured default — and explicit `--format` still wins.
+
+### Fixed
+
+- Per-genus AMR partition and SQLite-index lookup is now case-insensitive. GTDB letter clades (e.g. `Legionella_C`) were previously normalised to `Legionella_c`, missing the on-disk `Legionella_C.parquet` partition; `atb amr --genus Legionella_C` silently fell back to a full monolithic scan. Results were correct but the optimisation was bypassed for any genus name where casing changed after the first character.
+- `atb amr --type` help text no longer claims `amr` is the default. The default is unset (matches all element types); the help string now reads `default: all types`.
 
 ### Added
 

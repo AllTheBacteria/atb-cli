@@ -351,8 +351,17 @@ atb amr --species "Escherichia coli" --type virulence
 # Query all three categories at once
 atb amr --species "Escherichia coli" --type all
 
-# Output to file
+# Output to file (CSV)
 atb amr --species "Klebsiella pneumoniae" --hq-only --format csv -o kpn_amr.csv
+
+# Auto-gzip when -o ends in .gz; format inferred from filename (.csv.gz -> CSV)
+atb amr --species "Escherichia coli" --hq-only -o ecoli_amr.tsv.gz
+
+# Restrict to a specific list of samples (comma-separated)
+atb amr --samples SAMD00093868,SAMEA104470147 --type all
+
+# Or read accessions from a file (one per line, '#' comments allowed)
+atb amr --sample-file my_isolates.txt --class "BETA-LACTAM"
 
 # Download matching assemblies directly
 atb amr --species "Escherichia coli" --class "BETA-LACTAM" --hq-only --download -d ./genomes
@@ -660,6 +669,13 @@ atb query --species "Escherichia coli" --limit 5 --format tsv     # tab-separate
 atb query --species "Escherichia coli" --limit 5 --format csv     # comma-separated
 atb query --species "Escherichia coli" --limit 5 --format json    # JSON array
 atb query --species "Escherichia coli" --limit 5 --format table   # pretty table
+```
+
+When writing to a file with `-o`, the format is inferred from the filename if `--format` is not given (`.csv` -> csv, `.tsv` -> tsv, `.json` -> json). Append `.gz` to any of these and the output is gzipped on the fly:
+
+```bash
+atb query --species "Escherichia coli" --hq-only -o results.csv.gz   # gzipped CSV
+atb amr   --species "Escherichia coli" --hq-only -o ecoli_amr.tsv.gz # gzipped TSV
 ```
 
 ## Available Columns
