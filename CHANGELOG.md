@@ -2,7 +2,7 @@
 
 All notable changes to `atb-cli` are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
-## Unreleased
+## [v0.15.0](https://github.com/allthebacteria/atb-cli/releases/tag/v0.15.0) - 2026-05-01
 
 ### Added
 
@@ -13,6 +13,8 @@ All notable changes to `atb-cli` are documented here. Format follows [Keep a Cha
 
 - Per-genus AMR partition and SQLite-index lookup is now case-insensitive. GTDB letter clades (e.g. `Legionella_C`) were previously normalised to `Legionella_c`, missing the on-disk `Legionella_C.parquet` partition; `atb amr --genus Legionella_C` silently fell back to a full monolithic scan. Results were correct but the optimisation was bypassed for any genus name where casing changed after the first character.
 - `atb amr --type` help text no longer claims `amr` is the default. The default is unset (matches all element types); the help string now reads `default: all types`.
+
+## [v0.14.2](https://github.com/allthebacteria/atb-cli/releases/tag/v0.14.2) - 2026-04-30
 
 ### Added
 
