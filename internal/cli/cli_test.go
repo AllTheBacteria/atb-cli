@@ -132,6 +132,27 @@ func TestSummariseFromCSV(t *testing.T) {
 	}
 }
 
+func TestSummariseDefault(t *testing.T) {
+	stdout, _, err := runCmd("summarise", "--data-dir", fixtureDir)
+	if err != nil {
+		t.Fatalf("summarise (default) failed: %v", err)
+	}
+
+	if !strings.Contains(stdout, "Total genomes:") {
+		t.Errorf("expected 'Total genomes:' in default summary output, got:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "Top species:") {
+		t.Errorf("expected 'Top species:' in default summary output, got:\n%s", stdout)
+	}
+}
+
+func TestSummariseRejectsPositionalArgs(t *testing.T) {
+	_, _, err := runCmd("summarise", "--data-dir", fixtureDir, "foo")
+	if err == nil {
+		t.Fatal("expected error for stray positional argument, got nil")
+	}
+}
+
 func TestSummariseFromNonExistent(t *testing.T) {
 	_, _, err := runCmd("summarise", "--from", "/nonexistent/path/results.csv")
 	if err == nil {

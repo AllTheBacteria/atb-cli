@@ -2,6 +2,12 @@
 
 All notable changes to `atb-cli` are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [v0.15.1](https://github.com/allthebacteria/atb-cli/releases/tag/v0.15.1) - 2026-05-05
+
+### Fixed
+
+- `atb summarise` with no arguments now prints the default summary instead of the help screen. The earlier guard treated zero flags + zero positional args as "show help", contradicting the documented `Default summary of the full database` example (#6). Stray positional args (e.g. `atb summarise foo`) now error via `cobra.NoArgs` rather than being silently ignored.
+
 ## [v0.15.0](https://github.com/allthebacteria/atb-cli/releases/tag/v0.15.0) - 2026-05-01
 
 ### Added

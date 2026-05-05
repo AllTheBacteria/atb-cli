@@ -20,6 +20,7 @@ func newSummariseCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "summarise",
 		Aliases: []string{"summarize"},
+		Args:    cobra.NoArgs,
 		Short:   "Print summary statistics for the ATB database",
 		Long: `Print summary statistics for all genomes in the local ATB database.
 
@@ -37,10 +38,6 @@ Use --by to group results by a specific column (e.g. --by sylph_species).`,
   # Pipe query to summarise
   atb query --genus Salmonella --hq-only --limit 100 --format csv | atb summarise --from -`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if cmd.Flags().NFlag() == 0 && len(args) == 0 {
-				return cmd.Help()
-			}
-
 			var rows []query.ResultRow
 
 			if from != "" {
