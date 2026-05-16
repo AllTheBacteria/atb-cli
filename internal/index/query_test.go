@@ -255,3 +255,151 @@ func TestMLSTInInfoRow(t *testing.T) {
 		t.Error("InfoRow: mlst_st is empty")
 	}
 }
+
+// SAMN12 is the only fixture row with asm_fasta_on_osf=0. It's also E. coli +
+// PASS + Incr_release.202408, so the published-only filter must reduce all
+// three counters together: total 20→19, HQ 17→16, E. coli 5→4,
+// Incr_release.202408 4→3.
+func TestQueryStatsExcludesUnpublished(t *testing.T) {
+	db := buildTestIndex(t)
+
+	stats, err := db.QueryStats("", false)
+	if err != nil {
+		t.Fatalf("QueryStats: %v", err)
+	}
+	if stats.Total != 19 {
+		t.Errorf("Total: expected 19 (20 minus SAMN12), got %d", stats.Total)
+	}
+	if stats.HQCount != 16 {
+		t.Errorf("HQCount: expected 16 (17 PASS minus SAMN12), got %d", stats.HQCount)
+	}
+	if got := stats.Datasets["Incr_release.202408"]; got != 3 {
+		t.Errorf("Datasets[Incr_release.202408]: expected 3, got %d", got)
+	}
+
+	var ecoli int
+	for _, sc := range stats.TopSpecies {
+		if sc.Species == "Escherichia coli" {
+			ecoli = sc.Count
+		}
+	}
+	if ecoli != 4 {
+		t.Errorf("TopSpecies E. coli: expected 4, got %d", ecoli)
+	}
+}
+
+// QueryStats keeps "unknown" in TopSpecies because it represents a real
+// published category (assembled but unclassifiable by sylph). SpeciesList,
+// in contrast, excludes it — see TestSpeciesListExcludesUnknown.
+func TestQueryStatsTopSpeciesIncludesUnknown(t *testing.T) {
+	db := buildTestIndex(t)
+
+	stats, err := db.QueryStats("", false)
+	if err != nil {
+		t.Fatalf("QueryStats: %v", err)
+	}
+
+	var found bool
+	for _, sc := range stats.TopSpecies {
+		if sc.Species == "unknown" {
+			found = true
+			if sc.Count != 1 {
+				t.Errorf("TopSpecies unknown: expected count 1, got %d", sc.Count)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("TopSpecies should include \"unknown\" (SAMN20), got %+v", stats.TopSpecies)
+	}
+}
+
+func TestQueryStatsSpeciesFilter(t *testing.T) {
+	db := buildTestIndex(t)
+
+	// E. coli with the published-only filter: 5 rows minus SAMN12 = 4.
+	stats, err := db.QueryStats("Escherichia coli", false)
+	if err != nil {
+		t.Fatalf("QueryStats: %v", err)
+	}
+	if stats.Total != 4 {
+		t.Errorf("Total for E. coli: expected 4, got %d", stats.Total)
+	}
+	if stats.HQCount != 4 {
+		t.Errorf("HQCount for E. coli: expected 4 (all PASS), got %d", stats.HQCount)
+	}
+}
+
+func TestQueryStatsHQOnly(t *testing.T) {
+	db := buildTestIndex(t)
+
+	// HQOnly applies on top of the published filter: 17 PASS minus SAMN12 = 16.
+	stats, err := db.QueryStats("", true)
+	if err != nil {
+		t.Fatalf("QueryStats: %v", err)
+	}
+	if stats.Total != 16 {
+		t.Errorf("Total with HQOnly: expected 16, got %d", stats.Total)
+	}
+	if stats.HQCount != 16 {
+		t.Errorf("HQCount with HQOnly: expected 16, got %d", stats.HQCount)
+	}
+}
+
+func TestSpeciesListExcludesUnpublished(t *testing.T) {
+	db := buildTestIndex(t)
+
+	list, err := db.SpeciesList(0)
+	if err != nil {
+		t.Fatalf("SpeciesList: %v", err)
+	}
+	if len(list) == 0 {
+		t.Fatal("SpeciesList returned no rows")
+	}
+	// Ordered by count desc: E. coli is the unique top entry at 4
+	// (S. aureus, S. enterica are tied at 3 below).
+	if list[0].Species != "Escherichia coli" {
+		t.Errorf("first species: expected Escherichia coli, got %q", list[0].Species)
+	}
+	if list[0].Count != 4 {
+		t.Errorf("E. coli count: expected 4 (post-filter), got %d", list[0].Count)
+	}
+
+	// Sum of all named-species counts after the filter must equal 18
+	// (19 published rows minus the 1 "unknown" SpeciesList drops).
+	var sum int
+	for _, sc := range list {
+		sum += sc.Count
+	}
+	if sum != 18 {
+		t.Errorf("sum of species counts: expected 18, got %d (rows=%+v)", sum, list)
+	}
+}
+
+func TestSpeciesListExcludesUnknown(t *testing.T) {
+	db := buildTestIndex(t)
+
+	list, err := db.SpeciesList(0)
+	if err != nil {
+		t.Fatalf("SpeciesList: %v", err)
+	}
+	for _, sc := range list {
+		if sc.Species == "unknown" || sc.Species == "" {
+			t.Errorf("SpeciesList should not return %q rows, got %+v", sc.Species, sc)
+		}
+	}
+}
+
+func TestSpeciesListLimit(t *testing.T) {
+	db := buildTestIndex(t)
+
+	list, err := db.SpeciesList(3)
+	if err != nil {
+		t.Fatalf("SpeciesList: %v", err)
+	}
+	if len(list) != 3 {
+		t.Errorf("expected limit=3 to return 3 rows, got %d", len(list))
+	}
+	if list[0].Species != "Escherichia coli" {
+		t.Errorf("first species: expected Escherichia coli, got %q", list[0].Species)
+	}
+}

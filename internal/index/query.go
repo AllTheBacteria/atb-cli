@@ -286,9 +286,11 @@ type SpeciesCount struct {
 	Count   int
 }
 
-// SpeciesList returns species sorted by descending sample count.
+// SpeciesList returns species sorted by descending sample count. Only samples
+// with an assembly actually published on OSF (asm_fasta_on_osf == 1) are
+// counted, matching the published-release semantics used by atb summarise.
 func (d *DB) SpeciesList(limit int) ([]SpeciesCount, error) {
-	q := `SELECT sylph_species, COUNT(*) as cnt FROM samples WHERE sylph_species != '' AND sylph_species != 'unknown' GROUP BY sylph_species ORDER BY cnt DESC`
+	q := `SELECT sylph_species, COUNT(*) as cnt FROM samples WHERE asm_fasta_on_osf != 0 AND sylph_species != '' AND sylph_species != 'unknown' GROUP BY sylph_species ORDER BY cnt DESC`
 	if limit > 0 {
 		q += fmt.Sprintf(" LIMIT %d", limit)
 	}
@@ -318,8 +320,12 @@ type Stats struct {
 }
 
 // QueryStats returns summary statistics, optionally filtered by species and/or HQ.
+// Stats always exclude samples that aren't published on OSF (asm_fasta_on_osf == 0),
+// so the four numbers match what users see in the published release tables.
 func (d *DB) QueryStats(species string, hqOnly bool) (Stats, error) {
-	var conditions []string
+	// asm_fasta_on_osf gate goes first so callers see consistent totals
+	// across the four sub-queries below.
+	conditions := []string{"asm_fasta_on_osf != 0"}
 	var args []any
 
 	if species != "" {
@@ -330,10 +336,7 @@ func (d *DB) QueryStats(species string, hqOnly bool) (Stats, error) {
 		conditions = append(conditions, "hq_filter = 'PASS'")
 	}
 
-	where := ""
-	if len(conditions) > 0 {
-		where = " WHERE " + strings.Join(conditions, " AND ")
-	}
+	where := " WHERE " + strings.Join(conditions, " AND ")
 
 	var stats Stats
 
@@ -346,21 +349,16 @@ func (d *DB) QueryStats(species string, hqOnly bool) (Stats, error) {
 	hqWhere := where
 	hqArgs := append([]any{}, args...)
 	if !hqOnly {
-		if hqWhere == "" {
-			hqWhere = " WHERE hq_filter = 'PASS'"
-		} else {
-			hqWhere += " AND hq_filter = 'PASS'"
-		}
+		hqWhere += " AND hq_filter = 'PASS'"
 	}
 	if err := d.db.QueryRow("SELECT COUNT(*) FROM samples"+hqWhere, hqArgs...).Scan(&stats.HQCount); err != nil {
 		return stats, fmt.Errorf("counting hq: %w", err)
 	}
 
-	// Top species (up to 10)
-	speciesQ := `SELECT sylph_species, COUNT(*) as cnt FROM samples` + where + ` AND sylph_species != '' AND sylph_species != 'unknown' GROUP BY sylph_species ORDER BY cnt DESC LIMIT 10`
-	if where == "" {
-		speciesQ = `SELECT sylph_species, COUNT(*) as cnt FROM samples WHERE sylph_species != '' AND sylph_species != 'unknown' GROUP BY sylph_species ORDER BY cnt DESC LIMIT 10`
-	}
+	// Top species (up to 10). Keep "unknown" — it's a legitimate published
+	// category (sample assembled but sylph couldn't classify). Skip only
+	// truly empty species names.
+	speciesQ := `SELECT sylph_species, COUNT(*) as cnt FROM samples` + where + ` AND sylph_species != '' GROUP BY sylph_species ORDER BY cnt DESC LIMIT 10`
 	rows, err := d.db.Query(speciesQ, args...)
 	if err != nil {
 		return stats, fmt.Errorf("top species query: %w", err)
