@@ -22,9 +22,14 @@ func newSummariseCmd() *cobra.Command {
 		Aliases: []string{"summarize"},
 		Args:    cobra.NoArgs,
 		Short:   "Print summary statistics for the ATB database",
-		Long: `Print summary statistics for all genomes in the local ATB database.
+		Long: `Print summary statistics for the ATB database.
 
-By default prints total counts, HQ fraction, top species, and dataset breakdown.
+By default prints total counts, HQ fraction, top species, and dataset breakdown
+for assemblies actually published on OSF (asm_fasta_on_osf == 1). To include
+unprocessed or rejected samples, run an unfiltered query and pipe it in:
+
+  atb query --format csv | atb summarise --from -
+
 Use --by to group results by a specific column (e.g. --by sylph_species).`,
 		Example: `  # Default summary of the full database
   atb summarise
@@ -61,8 +66,10 @@ Use --by to group results by a specific column (e.g. --by sylph_species).`,
 					return err
 				}
 
-				// Run a full query with no filters to get all rows
-				rows, err = query.Execute(dir, query.Filters{}, nil)
+				// Count only assemblies actually published on OSF
+				// (asm_fasta_on_osf == 1). Without this, totals double-count
+				// unprocessed/rejected samples and species lists fill with "NA".
+				rows, err = query.Execute(dir, query.Filters{HasAssembly: true}, nil)
 				if err != nil {
 					return fmt.Errorf("reading database: %w", err)
 				}

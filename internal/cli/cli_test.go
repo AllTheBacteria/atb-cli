@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -143,6 +144,15 @@ func TestSummariseDefault(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "Top species:") {
 		t.Errorf("expected 'Top species:' in default summary output, got:\n%s", stdout)
+	}
+
+	// Fixture has 20 assembly rows but SAMN12 (E. coli) has asm_fasta_on_osf=0,
+	// so the default summary must exclude it: 19 total, 4 E. coli (not 5).
+	if !regexp.MustCompile(`Total genomes:\s+19\b`).MatchString(stdout) {
+		t.Errorf("expected Total genomes of 19 after asm_fasta_on_osf filter, got:\n%s", stdout)
+	}
+	if !regexp.MustCompile(`Escherichia coli\s+4\b`).MatchString(stdout) {
+		t.Errorf("expected Escherichia coli count of 4 after filter, got:\n%s", stdout)
 	}
 }
 
