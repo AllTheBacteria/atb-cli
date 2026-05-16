@@ -2,6 +2,13 @@
 
 All notable changes to `atb-cli` are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [v0.15.2](https://github.com/allthebacteria/atb-cli/releases/tag/v0.15.2) - 2026-05-16
+
+### Fixed
+
+- Summary statistics now exclude unprocessed/rejected samples (`asm_fasta_on_osf == 0`) so totals match the published OSF release (#7). The fix applies to both code paths: `atb summarise` (default, no `--from`) and the MCP-facing `atb_stats` / `atb_species_list` tools backed by `internal/index.QueryStats` and `SpeciesList`. On v0.15.1 production data this drops `Total genomes` by ~460k and removes the spurious `NA` entry from the top-species list. `atb summarise --from <file>` is unchanged — user-supplied rows are summarised as-is.
+- `QueryStats.TopSpecies` now retains the `unknown` category (assembled samples sylph could not classify) since it's a real published bucket; `SpeciesList` still drops it because its purpose is to enumerate named species.
+
 ## [v0.15.1](https://github.com/allthebacteria/atb-cli/releases/tag/v0.15.1) - 2026-05-05
 
 ### Fixed
