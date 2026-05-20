@@ -2,6 +2,24 @@
 
 All notable changes to `atb-cli` are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [v0.16.0](https://github.com/allthebacteria/atb-cli/releases/tag/v0.16.0) - 2026-05-20
+
+### Added
+
+- Environment-variable overrides for shared installations. `ATB_DATA_DIR` (alias: `ATB_DATADIR`) overrides the data directory and `ATB_CONFIG` overrides the config file path. Both precede the loaded config but yield to an explicit `--data-dir` flag, so admins on multi-user servers can point every user at a shared data volume via `/etc/profile.d` without writing per-user config files (#12). All CLI subcommands route through a single `resolveDataDir` helper so the precedence is consistent.
+- `atb info` now prints `run_accession` as the first field of the ENA Metadata section, surfacing the SRA run accession directly instead of asking users to scrape it out of the `fastq_ftp` URL (#13).
+
+### Fixed
+
+- Release binaries are built with `CGO_ENABLED=0`, producing statically linked executables that run on RHEL 7/8/9/10, Debian 11, and other older-glibc systems. The previous dynamic builds failed at startup with `GLIBC_2.32`/`GLIBC_2.34 not found` (#10). All dependencies are pure Go (including `modernc.org/sqlite`), so nothing is lost from dropping CGO; the Makefile sets the same flag for local builds.
+- `atb config show` and `config.Save` no longer emit the BurntSushi/toml default two-space indent. Long URL values like `base_url` were wrapping in narrow terminals and looked like they had unmatched quotes (e.g. a visible line of `AllTheBacteria"`); standard unindented TOML keeps values column-aligned (#11).
+- `atb info` no longer pauses ~24s after the MLST section. The ENA join was using `ReadFiltered`, which materialised the entire ~2M-row ENA parquet into memory before applying the sample predicate. All five single-sample lookups in `atb info` (ENA, Assembly, Stats, CheckM2, MLST) now use `ReadStreamFiltered` with `limit=1`, filtering during deserialization and exiting on the first match (#14).
+
+### Docs
+
+- README's `curl ... | bash` install example now places `ATB_INSTALL_DIR=...` after the pipe so it scopes to the install script rather than to curl. Adds a short note explaining why the placement matters (#9).
+- New **Shared installations (multi-user servers)** section documenting `ATB_DATA_DIR` and `ATB_CONFIG`.
+
 ## [v0.15.2](https://github.com/allthebacteria/atb-cli/releases/tag/v0.15.2) - 2026-05-16
 
 ### Fixed
