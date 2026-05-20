@@ -6,6 +6,9 @@ LDFLAGS    := -ldflags "-X main.version=$(VERSION)"
 
 GO         := go
 GOFLAGS    ?=
+# Build a statically linked binary so releases run on older glibc systems
+# (e.g. RHEL 7/8/9, Debian 11). All dependencies are pure-Go.
+export CGO_ENABLED ?= 0
 
 .PHONY: build test lint clean fixtures
 

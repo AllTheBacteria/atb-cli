@@ -4,6 +4,8 @@ builds:
   - id: atb
     main: ./cmd/atb
     binary: atb
+    env:
+      - CGO_ENABLED=0
     ldflags:
       - -s -w -X main.version={{.Version}}
     goos:
