@@ -21,9 +21,11 @@ func printENAInfo(w io.Writer, dir, sampleAccession string) {
 	if _, err := os.Stat(enaPath); err != nil {
 		return
 	}
-	rows, err := pq.ReadFiltered[pq.ENARow](enaPath, func(r pq.ENARow) bool {
+	// Single-row lookup: stream and exit on first match so we don't materialise
+	// the entire (~2M-row) ENA table into memory just to read one row (#14).
+	rows, err := pq.ReadStreamFiltered[pq.ENARow](enaPath, func(r pq.ENARow) bool {
 		return r.SampleAccession == sampleAccession
-	})
+	}, 1)
 	if err != nil {
 		fmt.Fprintf(w, "ena: error reading: %v\n\n", err)
 		return
@@ -33,6 +35,7 @@ func printENAInfo(w io.Writer, dir, sampleAccession string) {
 	}
 	e := rows[0]
 	fmt.Fprintln(w, "=== ENA Metadata ===")
+	fmt.Fprintf(w, "  run_accession:       %s\n", e.RunAccession)
 	fmt.Fprintf(w, "  country:             %s\n", e.Country)
 	fmt.Fprintf(w, "  collection_date:     %s\n", e.CollectionDate)
 	fmt.Fprintf(w, "  instrument_platform: %s\n", e.InstrumentPlatform)
@@ -130,12 +133,13 @@ func newInfoCmd() *cobra.Command {
 
 			found := false
 
-			// Assembly info
+			// Assembly info. ReadStreamFiltered with limit=1 stops scanning as
+			// soon as the sample is found, avoiding a full-file load (#14).
 			assemblyPath := filepath.Join(dir, "assembly.parquet")
 			if _, err := os.Stat(assemblyPath); err == nil {
-				rows, err := pq.ReadFiltered[pq.AssemblyRow](assemblyPath, func(r pq.AssemblyRow) bool {
+				rows, err := pq.ReadStreamFiltered[pq.AssemblyRow](assemblyPath, func(r pq.AssemblyRow) bool {
 					return r.SampleAccession == accession
-				})
+				}, 1)
 				if err != nil {
 					fmt.Fprintf(w, "assembly: error reading: %v\n", err)
 				} else if len(rows) > 0 {
@@ -159,9 +163,9 @@ func newInfoCmd() *cobra.Command {
 			// Assembly stats
 			statsPath := filepath.Join(dir, "assembly_stats.parquet")
 			if _, err := os.Stat(statsPath); err == nil {
-				rows, err := pq.ReadFiltered[pq.AssemblyStatsRow](statsPath, func(r pq.AssemblyStatsRow) bool {
+				rows, err := pq.ReadStreamFiltered[pq.AssemblyStatsRow](statsPath, func(r pq.AssemblyStatsRow) bool {
 					return r.SampleAccession == accession
-				})
+				}, 1)
 				if err != nil {
 					fmt.Fprintf(w, "assembly_stats: error reading: %v\n", err)
 				} else if len(rows) > 0 {
@@ -181,9 +185,9 @@ func newInfoCmd() *cobra.Command {
 			// CheckM2 quality
 			checkm2Path := filepath.Join(dir, "checkm2.parquet")
 			if _, err := os.Stat(checkm2Path); err == nil {
-				rows, err := pq.ReadFiltered[pq.CheckM2Row](checkm2Path, func(r pq.CheckM2Row) bool {
+				rows, err := pq.ReadStreamFiltered[pq.CheckM2Row](checkm2Path, func(r pq.CheckM2Row) bool {
 					return r.SampleAccession == accession
-				})
+				}, 1)
 				if err != nil {
 					fmt.Fprintf(w, "checkm2: error reading: %v\n", err)
 				} else if len(rows) > 0 {
@@ -208,9 +212,9 @@ func newInfoCmd() *cobra.Command {
 			// MLST (optional)
 			mlstPath := filepath.Join(dir, "mlst.parquet")
 			if _, err := os.Stat(mlstPath); err == nil {
-				rows, err := pq.ReadFiltered[pq.MLSTRow](mlstPath, func(r pq.MLSTRow) bool {
+				rows, err := pq.ReadStreamFiltered[pq.MLSTRow](mlstPath, func(r pq.MLSTRow) bool {
 					return r.Sample == accession
-				})
+				}, 1)
 				if err != nil {
 					fmt.Fprintf(w, "mlst: error reading: %v\n", err)
 				} else if len(rows) > 0 {
