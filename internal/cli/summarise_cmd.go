@@ -57,10 +57,7 @@ Use --by to group results by a specific column (e.g. --by sylph_species).`,
 					return err
 				}
 
-				dir := dataDir
-				if dir == "" {
-					dir = cfg.General.DataDir
-				}
+				dir := resolveDataDir(cfg)
 
 				if err := ensureDatabase(dir); err != nil {
 					return err

@@ -21,10 +21,7 @@ func newVersionCmd() *cobra.Command {
 				return err
 			}
 
-			resolvedDataDir := dataDir
-			if resolvedDataDir == "" {
-				resolvedDataDir = cfg.General.DataDir
-			}
+			resolvedDataDir := resolveDataDir(cfg)
 
 			fmt.Fprintf(cmd.OutOrStdout(), "atb-cli version: %s\n", root.Version)
 			fmt.Fprintf(cmd.OutOrStdout(), "Go version:       %s\n", runtime.Version())

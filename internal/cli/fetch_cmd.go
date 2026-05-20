@@ -58,10 +58,7 @@ Use --tables to specify exact tables by name.`,
 				return err
 			}
 
-			dir := dataDir
-			if dir == "" {
-				dir = cfg.General.DataDir
-			}
+			dir := resolveDataDir(cfg)
 
 			par := parallel
 			if par == 0 {

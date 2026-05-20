@@ -74,10 +74,7 @@ func newMLSTCmd() *cobra.Command {
 				return err
 			}
 
-			dir := dataDir
-			if dir == "" {
-				dir = cfg.General.DataDir
-			}
+			dir := resolveDataDir(cfg)
 
 			if err := ensureDatabase(dir); err != nil {
 				return err

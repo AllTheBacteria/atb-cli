@@ -106,10 +106,7 @@ Run 'atb fetch' to download the data before querying.`,
 				return err
 			}
 
-			dir := dataDir
-			if dir == "" {
-				dir = cfg.General.DataDir
-			}
+			dir := resolveDataDir(cfg)
 
 			speciesList := splitCSV(species)
 			explicitGenera := splitCSV(genus)

@@ -38,10 +38,17 @@ type DownloadConfig struct {
 }
 
 // DefaultDataDir returns the OS-standard data directory for ATB.
+// If ATB_DATA_DIR (or its compact alias ATB_DATADIR) is set, it takes
+// precedence on every platform — useful for shared installations where each
+// user (or a system-wide profile) wants to point at a common data volume
+// without editing per-user config files.
 // On Windows: %LOCALAPPDATA%\atb\data
 // On macOS: ~/Library/Application Support/atb/data
 // On Linux/other: $XDG_DATA_HOME/atb/data or ~/.local/share/atb/data
 func DefaultDataDir() string {
+	if env := dataDirEnv(); env != "" {
+		return env
+	}
 	switch runtime.GOOS {
 	case "windows":
 		if appdata := os.Getenv("LOCALAPPDATA"); appdata != "" {
@@ -59,6 +66,34 @@ func DefaultDataDir() string {
 		home, _ := os.UserHomeDir()
 		return filepath.Join(home, ".local", "share", "atb", "data")
 	}
+}
+
+// ResolveDataDir returns the effective data directory using this precedence:
+//  1. flagValue (--data-dir CLI flag) if non-empty
+//  2. ATB_DATA_DIR environment variable (alias: ATB_DATADIR)
+//  3. cfg.General.DataDir from the loaded config
+//
+// Use this everywhere a command needs the data directory so the env var works
+// in shared-server setups without forcing each user to maintain their own
+// config file.
+func ResolveDataDir(cfg Config, flagValue string) string {
+	if flagValue != "" {
+		return flagValue
+	}
+	if env := dataDirEnv(); env != "" {
+		return env
+	}
+	return cfg.General.DataDir
+}
+
+// dataDirEnv returns the data-dir override from the environment.
+// ATB_DATA_DIR is the canonical name (matches ATB_INSTALL_DIR / docker-entrypoint.sh);
+// ATB_DATADIR is accepted as an alias to match what users naturally type.
+func dataDirEnv() string {
+	if v := os.Getenv("ATB_DATA_DIR"); v != "" {
+		return v
+	}
+	return os.Getenv("ATB_DATADIR")
 }
 
 // Default returns a Config populated with sensible defaults.
@@ -83,10 +118,15 @@ func Default() Config {
 }
 
 // DefaultPath returns the default config file path.
+// If ATB_CONFIG is set, it takes precedence — letting a shared-server admin
+// point all users at a single config file via /etc/profile.d.
 // On Windows: %LOCALAPPDATA%\atb\config.toml
 // On macOS: ~/Library/Application Support/atb/config.toml
 // On Linux/other: $XDG_CONFIG_HOME/atb/config.toml or ~/.config/atb/config.toml
 func DefaultPath() string {
+	if env := os.Getenv("ATB_CONFIG"); env != "" {
+		return env
+	}
 	switch runtime.GOOS {
 	case "windows":
 		if appdata := os.Getenv("LOCALAPPDATA"); appdata != "" {
@@ -134,7 +174,9 @@ func Save(cfg Config, path string) error {
 	}
 	defer f.Close()
 
-	return toml.NewEncoder(f).Encode(cfg)
+	enc := toml.NewEncoder(f)
+	enc.Indent = ""
+	return enc.Encode(cfg)
 }
 
 // ExpandPath expands a leading ~ to the user's home directory.

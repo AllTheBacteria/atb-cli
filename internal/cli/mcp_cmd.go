@@ -58,10 +58,7 @@ Usage with ChatGPT / OpenAI API (HTTP/SSE mode):
 				return err
 			}
 
-			dir := dataDir
-			if dir == "" {
-				dir = cfg.General.DataDir
-			}
+			dir := resolveDataDir(cfg)
 			if dir == "" {
 				dir = config.DefaultDataDir()
 			}

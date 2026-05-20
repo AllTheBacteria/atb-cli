@@ -118,6 +118,94 @@ func TestConfigPath(t *testing.T) {
 	}
 }
 
+func TestResolveDataDir(t *testing.T) {
+	cfg := config.Config{}
+	cfg.General.DataDir = "/from-config"
+
+	t.Run("flag wins over env and config", func(t *testing.T) {
+		t.Setenv("ATB_DATA_DIR", "/from-env")
+		t.Setenv("ATB_DATADIR", "")
+		got := config.ResolveDataDir(cfg, "/from-flag")
+		if got != "/from-flag" {
+			t.Errorf("ResolveDataDir(flag=/from-flag) = %q, want /from-flag", got)
+		}
+	})
+
+	t.Run("ATB_DATA_DIR wins over config when no flag", func(t *testing.T) {
+		t.Setenv("ATB_DATA_DIR", "/from-env")
+		t.Setenv("ATB_DATADIR", "")
+		got := config.ResolveDataDir(cfg, "")
+		if got != "/from-env" {
+			t.Errorf("ResolveDataDir(env=/from-env) = %q, want /from-env", got)
+		}
+	})
+
+	t.Run("ATB_DATADIR alias is honored", func(t *testing.T) {
+		t.Setenv("ATB_DATA_DIR", "")
+		t.Setenv("ATB_DATADIR", "/from-alias")
+		got := config.ResolveDataDir(cfg, "")
+		if got != "/from-alias" {
+			t.Errorf("ResolveDataDir(alias) = %q, want /from-alias", got)
+		}
+	})
+
+	t.Run("ATB_DATA_DIR wins over ATB_DATADIR alias", func(t *testing.T) {
+		t.Setenv("ATB_DATA_DIR", "/canonical")
+		t.Setenv("ATB_DATADIR", "/alias")
+		got := config.ResolveDataDir(cfg, "")
+		if got != "/canonical" {
+			t.Errorf("ResolveDataDir(both) = %q, want /canonical", got)
+		}
+	})
+
+	t.Run("config used when no flag or env", func(t *testing.T) {
+		t.Setenv("ATB_DATA_DIR", "")
+		t.Setenv("ATB_DATADIR", "")
+		got := config.ResolveDataDir(cfg, "")
+		if got != "/from-config" {
+			t.Errorf("ResolveDataDir(config=/from-config) = %q, want /from-config", got)
+		}
+	})
+}
+
+func TestDefaultDataDirWithEnv(t *testing.T) {
+	t.Setenv("ATB_DATA_DIR", "/shared/atb")
+	if got := config.DefaultDataDir(); got != "/shared/atb" {
+		t.Errorf("DefaultDataDir() with ATB_DATA_DIR=/shared/atb = %q, want /shared/atb", got)
+	}
+}
+
+func TestDefaultPathWithEnv(t *testing.T) {
+	t.Setenv("ATB_CONFIG", "/etc/atb/config.toml")
+	if got := config.DefaultPath(); got != "/etc/atb/config.toml" {
+		t.Errorf("DefaultPath() with ATB_CONFIG=/etc/atb/config.toml = %q, want /etc/atb/config.toml", got)
+	}
+}
+
+func TestSaveProducesUnindentedTOML(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+
+	cfg := config.Default()
+	if err := config.Save(cfg, path); err != nil {
+		t.Fatalf("Save returned error: %v", err)
+	}
+
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+
+	// Standard TOML output has no leading whitespace on key lines; the
+	// previous default of two-space indent confused users who saw long URL
+	// values wrap in narrow terminals (issue #11).
+	for _, line := range strings.Split(string(contents), "\n") {
+		if strings.HasPrefix(line, " ") {
+			t.Errorf("Save produced indented line %q, want no leading spaces", line)
+		}
+	}
+}
+
 func TestExpandHome(t *testing.T) {
 	home, err := os.UserHomeDir()
 	if err != nil {

@@ -93,10 +93,7 @@ This is required before running 'atb sketch query'.`,
 				return err
 			}
 
-			dir := dataDir
-			if dir == "" {
-				dir = cfg.General.DataDir
-			}
+			dir := resolveDataDir(cfg)
 
 			sDir := sketchDir(dir)
 
@@ -198,10 +195,7 @@ Identity) and metadata from the local ATB index.`,
 				return err
 			}
 
-			dir := dataDir
-			if dir == "" {
-				dir = cfg.General.DataDir
-			}
+			dir := resolveDataDir(cfg)
 
 			if _, err := sketch.FindBinary(); err != nil {
 				return err
@@ -317,10 +311,7 @@ func newSketchInfoCmd() *cobra.Command {
 				return err
 			}
 
-			dir := dataDir
-			if dir == "" {
-				dir = cfg.General.DataDir
-			}
+			dir := resolveDataDir(cfg)
 
 			if !sketchDbExists(dir) {
 				return fmt.Errorf("sketch database not found. Run 'atb sketch fetch' first")

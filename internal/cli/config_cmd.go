@@ -39,6 +39,13 @@ func loadConfig() (config.Config, error) {
 	return config.Load(resolveConfigPath())
 }
 
+// resolveDataDir returns the effective data directory by combining the global
+// --data-dir flag with the env var and config file (see config.ResolveDataDir).
+// This wrapper avoids each command having to repeat the precedence dance.
+func resolveDataDir(cfg config.Config) string {
+	return config.ResolveDataDir(cfg, dataDir)
+}
+
 func newConfigInitCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "init",
@@ -74,7 +81,9 @@ func newConfigShowCmd() *cobra.Command {
 			}
 
 			var buf bytes.Buffer
-			if err := toml.NewEncoder(&buf).Encode(cfg); err != nil {
+			enc := toml.NewEncoder(&buf)
+			enc.Indent = ""
+			if err := enc.Encode(cfg); err != nil {
 				return err
 			}
 

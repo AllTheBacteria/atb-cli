@@ -76,10 +76,7 @@ With a positional argument, shows files in projects matching that substring.`,
 				return err
 			}
 
-			dir := dataDir
-			if dir == "" {
-				dir = cfg.General.DataDir
-			}
+			dir := resolveDataDir(cfg)
 
 			idx, err := osf.FetchIndex(dir, refresh)
 			if err != nil {
@@ -176,10 +173,7 @@ Use --project to filter by project prefix first.`,
 				return err
 			}
 
-			dir := dataDir
-			if dir == "" {
-				dir = cfg.General.DataDir
-			}
+			dir := resolveDataDir(cfg)
 
 			idx, err := osf.FetchIndex(dir, refresh)
 			if err != nil {

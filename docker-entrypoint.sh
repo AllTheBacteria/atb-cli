@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-DATA_DIR="${ATB_DATA_DIR:-/data}"
+DATA_DIR="${ATB_DATA_DIR:-${ATB_DATADIR:-/data}}"
 HTTP_PORT="${ATB_HTTP_PORT:-8080}"
 
 # Check if database exists
