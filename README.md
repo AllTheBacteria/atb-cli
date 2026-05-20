@@ -64,11 +64,13 @@ This detects your OS and architecture, downloads the latest release, and install
 
 ```bash
 # Install a specific version
-ATB_VERSION=v0.1.0 curl -fsSL https://raw.githubusercontent.com/allthebacteria/atb-cli/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/allthebacteria/atb-cli/main/install.sh | ATB_VERSION=v0.1.0 bash
 
 # Install the binary to a custom directory
-ATB_INSTALL_DIR=~/.local/bin curl -fsSL https://raw.githubusercontent.com/allthebacteria/atb-cli/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/allthebacteria/atb-cli/main/install.sh | ATB_INSTALL_DIR=/usr/local/bin bash
 ```
+
+> The env var goes **after** the pipe so it applies to `bash`, not `curl`. Writing `ATB_INSTALL_DIR=/path curl ... | bash` looks plausible but only sets the variable for the `curl` process — the install script run by `bash` never sees it.
 
 > **Heads up — pick a data directory before fetching.** `ATB_INSTALL_DIR` only controls where the `atb` binary lands, not where the database goes. A default `atb fetch` pulls the core parquet tables (~600 MB) **and** builds the per-genus AMR indexes, which expand to **~35 GB** on disk. Add another ~4.2 GB if you run `atb sketch fetch`. By default everything goes to `~/.local/share/atb/data`, which is often on a small home volume. To put it elsewhere, either pass `--data-dir` per command or set it once:
 >
@@ -551,6 +553,25 @@ atb config set download.parallel 8
 ```
 
 Config is stored at `~/.config/atb/config.toml`.
+
+#### Shared installations (multi-user servers)
+
+On a shared cluster you usually want every user to read from a single large data volume without each person editing their own config. Two env vars give an admin that without touching `$HOME`:
+
+| Variable | Effect |
+|----------|--------|
+| `ATB_DATA_DIR` (alias: `ATB_DATADIR`) | Overrides `general.data_dir` from the config file. Takes precedence over the config but loses to an explicit `--data-dir` flag. |
+| `ATB_CONFIG`  | Path to the config file. Useful for shipping a site-wide config (e.g. `/etc/atb/config.toml`) via `/etc/profile.d`. |
+
+Example: drop a one-liner into `/etc/profile.d/atb.sh` and every login shell picks up the shared paths:
+
+```sh
+# /etc/profile.d/atb.sh
+export ATB_DATA_DIR=/srv/atb/data
+export ATB_CONFIG=/etc/atb/config.toml
+```
+
+Resolution order for the data directory is `--data-dir` flag → `ATB_DATA_DIR` env → config file → OS default.
 
 ## LLM Integration (MCP)
 
