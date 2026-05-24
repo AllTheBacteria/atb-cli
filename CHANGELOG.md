@@ -2,6 +2,12 @@
 
 All notable changes to `atb-cli` are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [v0.16.1](https://github.com/allthebacteria/atb-cli/releases/tag/v0.16.1) - 2026-05-24
+
+### Fixed
+
+- `--data-dir` help text now reflects the effective default and surfaces the `ATB_DATA_DIR` override. Previously hardcoded to `default $HOME/.atb/data`, the usage string ignored the OS-specific data directory (e.g. `~/Library/Application Support/atb/data` on macOS) and gave no indication that `ATB_DATA_DIR` was honored, leaving shared-install users unable to confirm via `--help` that the env var was wired up (#15). The string is now built at runtime from `config.DefaultDataDir()` and explicitly mentions `$ATB_DATA_DIR`.
+
 ## [v0.16.0](https://github.com/allthebacteria/atb-cli/releases/tag/v0.16.0) - 2026-05-20
 
 ### Added
