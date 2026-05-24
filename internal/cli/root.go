@@ -1,11 +1,20 @@
 package cli
 
 import (
+	"fmt"
 	"os"
 
+	"github.com/allthebacteria/atb-cli/internal/config"
 	"github.com/allthebacteria/atb-cli/internal/selfupdate"
 	"github.com/spf13/cobra"
 )
+
+// dataDirUsage returns the --data-dir flag help string with the effective
+// default resolved at runtime, so users on shared installs see the
+// $ATB_DATA_DIR override reflected in --help.
+func dataDirUsage() string {
+	return fmt.Sprintf("data directory for downloaded files (default %s; override with $ATB_DATA_DIR)", config.DefaultDataDir())
+}
 
 var (
 	cfgFile string
@@ -25,7 +34,7 @@ var RootCmd = &cobra.Command{
 
 func init() {
 	RootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default $HOME/.atb/config.toml)")
-	RootCmd.PersistentFlags().StringVar(&dataDir, "data-dir", "", "data directory for downloaded files (default $HOME/.atb/data)")
+	RootCmd.PersistentFlags().StringVar(&dataDir, "data-dir", "", dataDirUsage())
 
 	RootCmd.AddCommand(newConfigCmd())
 	RootCmd.AddCommand(newQueryCmd())
@@ -65,7 +74,7 @@ func NewRootCmd(version string) *cobra.Command {
 	}
 
 	root.PersistentFlags().StringVar(&localCfgFile, "config", "", "config file (default $HOME/.atb/config.toml)")
-	root.PersistentFlags().StringVar(&localDataDir, "data-dir", "", "data directory for downloaded files (default $HOME/.atb/data)")
+	root.PersistentFlags().StringVar(&localDataDir, "data-dir", "", dataDirUsage())
 
 	// Sync local flag values into the package-level vars that subcommands read
 	// before each command executes.
