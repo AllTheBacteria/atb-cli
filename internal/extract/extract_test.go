@@ -120,7 +120,8 @@ func TestArchiveNoneFromXz(t *testing.T) {
 func TestArchiveGzFromXz(t *testing.T) {
 	dir := t.TempDir()
 	arc := filepath.Join(dir, "in.tar.xz")
-	writeTar(t, arc, "xz", map[string]string{"SAMD1.fa": ">s\nACGT\n"})
+	content := ">s\nACGT\n"
+	writeTar(t, arc, "xz", map[string]string{"SAMD1.fa": content})
 
 	out := filepath.Join(dir, "out")
 	res, err := Archive(arc, out, "gz")
@@ -130,11 +131,14 @@ func TestArchiveGzFromXz(t *testing.T) {
 	if res.Bytes <= 0 {
 		t.Errorf("Bytes = %d, want > 0", res.Bytes)
 	}
+	if res.Bytes < int64(len(content)) {
+		t.Errorf("Bytes = %d, want >= %d", res.Bytes, len(content))
+	}
 	gzPath := filepath.Join(out, "SAMD1.fa.gz")
 	if _, err := os.Stat(gzPath); err != nil {
 		t.Fatalf("expected %s: %v", gzPath, err)
 	}
-	if c := readGz(t, gzPath); c != ">s\nACGT\n" {
+	if c := readGz(t, gzPath); c != content {
 		t.Errorf("gz content = %q", c)
 	}
 }
@@ -145,8 +149,15 @@ func TestArchiveXzFromGz(t *testing.T) {
 	writeTar(t, arc, "gz", map[string]string{"SAMD1.fa": ">s\nACGT\n"})
 
 	out := filepath.Join(dir, "out")
-	if _, err := Archive(arc, out, "xz"); err != nil {
+	res, err := Archive(arc, out, "xz")
+	if err != nil {
 		t.Fatalf("Archive: %v", err)
+	}
+	if res.Files != 1 {
+		t.Errorf("Files = %d, want 1", res.Files)
+	}
+	if res.Bytes <= 0 {
+		t.Errorf("Bytes = %d, want > 0", res.Bytes)
 	}
 	xzPath := filepath.Join(out, "SAMD1.fa.xz")
 	if _, err := os.Stat(xzPath); err != nil {
@@ -186,6 +197,48 @@ func TestArchiveRejectsTraversal(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "escape.fa")); !os.IsNotExist(err) {
 		t.Errorf("traversal wrote outside destDir: %v", err)
+	}
+}
+
+func TestArchiveRejectsDotMember(t *testing.T) {
+	content := ">s\nACGT\n"
+	parent := t.TempDir()
+	arc := filepath.Join(parent, "dot.tar.gz")
+
+	// Build a tar.gz whose single member is named "." — a dot-member escape.
+	f, err := os.Create(arc)
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	gw := gzip.NewWriter(f)
+	tw := tar.NewWriter(gw)
+	hdr := &tar.Header{Name: ".", Mode: 0o644, Size: int64(len(content)), Typeflag: tar.TypeReg}
+	if err := tw.WriteHeader(hdr); err != nil {
+		t.Fatalf("write header: %v", err)
+	}
+	if _, err := io.WriteString(tw, content); err != nil {
+		t.Fatalf("write content: %v", err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatalf("tar close: %v", err)
+	}
+	if err := gw.Close(); err != nil {
+		t.Fatalf("gz close: %v", err)
+	}
+	f.Close()
+
+	dest := filepath.Join(parent, "out")
+	if err := os.MkdirAll(dest, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	if _, err := Archive(arc, dest, "gz"); err == nil {
+		t.Fatal("expected error for dot-member, got nil")
+	}
+
+	escaped := dest + ".gz"
+	if _, statErr := os.Stat(escaped); !os.IsNotExist(statErr) {
+		t.Errorf("dot-member wrote file outside destDir at %s: %v", escaped, statErr)
 	}
 }
 

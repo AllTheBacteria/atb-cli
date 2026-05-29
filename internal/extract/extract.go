@@ -114,7 +114,7 @@ func safeDestPath(destDir, name string) (string, error) {
 	}
 	dest := filepath.Join(destDir, filepath.Clean(name))
 	rel, err := filepath.Rel(destDir, dest)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
 		return "", fmt.Errorf("unsafe archive member (path traversal): %s", name)
 	}
 	return dest, nil
