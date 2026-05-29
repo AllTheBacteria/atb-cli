@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/allthebacteria/atb-cli/internal/download"
+	"github.com/allthebacteria/atb-cli/internal/extract"
 	"github.com/allthebacteria/atb-cli/internal/osf"
 	"github.com/allthebacteria/atb-cli/internal/output"
 )
@@ -135,14 +136,17 @@ With a positional argument, shows files in projects matching that substring.`,
 
 func newOSFDownloadCmd() *cobra.Command {
 	var (
-		outputDir string
-		parallel  int
-		dryRun    bool
-		force     bool
-		all       bool
-		project   string
-		verify    bool
-		refresh   bool
+		outputDir     string
+		parallel      int
+		dryRun        bool
+		force         bool
+		all           bool
+		project       string
+		verify        bool
+		refresh       bool
+		extractArc    bool
+		compress      string
+		deleteArchive bool
 	)
 
 	cmd := &cobra.Command{
@@ -166,6 +170,20 @@ Use --project to filter by project prefix first.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !all && len(args) == 0 {
 				return cmd.Help()
+			}
+
+			switch compress {
+			case "none", "gz", "xz":
+			default:
+				return fmt.Errorf("--compress must be none, gz, or xz (got %q)", compress)
+			}
+			if !extractArc {
+				if cmd.Flags().Changed("compress") {
+					return fmt.Errorf("--compress requires --extract")
+				}
+				if deleteArchive {
+					return fmt.Errorf("--delete-archive requires --extract")
+				}
 			}
 
 			cfg, err := loadConfig()
@@ -234,6 +252,9 @@ Use --project to filter by project prefix first.`,
 				for _, e := range entries {
 					fmt.Fprintf(os.Stderr, "  %.1f MB  %s/%s\n", e.SizeMB, e.Project, e.Filename)
 				}
+				if extractArc {
+					fmt.Fprintf(os.Stderr, "Would then extract archives (compress=%s, delete-archive=%v)\n", compress, deleteArchive)
+				}
 				return nil
 			}
 
@@ -280,8 +301,47 @@ Use --project to filter by project prefix first.`,
 				fmt.Fprintf(os.Stderr, "  error: %s: %s\n", e.URL, e.Error)
 			}
 
-			if result.Failed > 0 {
-				return fmt.Errorf("%d download(s) failed", result.Failed)
+			extractFailed := 0
+			if extractArc {
+				failedURL := make(map[string]bool, len(result.Errors))
+				for _, e := range result.Errors {
+					failedURL[e.URL] = true
+				}
+				for _, e := range entries {
+					if failedURL[e.URL] {
+						continue
+					}
+					name := filepath.Base(e.Filename)
+					if !extract.IsArchive(name) {
+						fmt.Fprintf(os.Stderr, "  skip (not an archive): %s\n", name)
+						continue
+					}
+					archivePath := filepath.Join(outDir, name)
+					fmt.Fprintf(os.Stderr, "  extracting %s ...\n", name)
+					xr, xerr := extract.Archive(archivePath, outDir, compress)
+					if xerr != nil {
+						fmt.Fprintf(os.Stderr, "  error: extract %s: %v\n", name, xerr)
+						extractFailed++
+						continue
+					}
+					fmt.Fprintf(os.Stderr, "  extracted %d file(s) from %s\n", xr.Files, name)
+					if deleteArchive {
+						if rmErr := os.Remove(archivePath); rmErr != nil {
+							fmt.Fprintf(os.Stderr, "  warning: could not delete %s: %v\n", name, rmErr)
+						}
+					}
+				}
+			}
+
+			if result.Failed > 0 || extractFailed > 0 {
+				switch {
+				case result.Failed > 0 && extractFailed > 0:
+					return fmt.Errorf("%d download(s) failed, %d extraction(s) failed", result.Failed, extractFailed)
+				case result.Failed > 0:
+					return fmt.Errorf("%d download(s) failed", result.Failed)
+				default:
+					return fmt.Errorf("%d extraction(s) failed", extractFailed)
+				}
 			}
 
 			return nil
@@ -296,6 +356,9 @@ Use --project to filter by project prefix first.`,
 	cmd.Flags().StringVar(&project, "project", "", "filter by project prefix")
 	cmd.Flags().BoolVar(&verify, "verify", false, "verify MD5 after download")
 	cmd.Flags().BoolVar(&refresh, "refresh", false, "re-download the index even if cached")
+	cmd.Flags().BoolVar(&extractArc, "extract", false, "extract downloaded tar archives (.tar.xz/.tar.gz/.tar)")
+	cmd.Flags().StringVar(&compress, "compress", "gz", "compression for extracted files: none, gz, or xz (requires --extract)")
+	cmd.Flags().BoolVar(&deleteArchive, "delete-archive", false, "delete each source archive after successful extraction (requires --extract)")
 
 	return cmd
 }
