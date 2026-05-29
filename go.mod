@@ -9,6 +9,7 @@ require (
 	github.com/olekukonko/tablewriter v1.1.4
 	github.com/parquet-go/parquet-go v0.29.0
 	github.com/spf13/cobra v1.10.2
+	github.com/ulikunitz/xz v0.5.12
 	golang.org/x/sys v0.42.0
 	golang.org/x/term v0.41.0
 	modernc.org/sqlite v1.47.0
