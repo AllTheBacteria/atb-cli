@@ -514,6 +514,20 @@ atb osf download --verify "DefenseFinder.*results"
 atb osf download --project AllTheBacteria/MLST --all -o ./mlst_data
 ```
 
+Extract assembly tarballs after downloading. The `.tar.xz` batches contain
+uncompressed FASTA files; `--extract` unpacks them, `--compress` chooses the
+on-disk encoding (`none`, `gz` (default), or `xz`), and `--delete-archive`
+removes each tarball once it has extracted successfully:
+
+```bash
+# Download all assembly batches and extract FASTAs as .fa.gz, removing tarballs
+atb osf download --project AllTheBacteria/Assembly --all \
+    --extract --compress gz --delete-archive -o ./assemblies
+
+# One batch, raw FASTA, keep the tarball
+atb osf download "Assembly.*batch.*1\." --extract --compress none
+```
+
 The file index is cached locally and refreshed every 7 days. Use `--refresh` to force an update.
 
 ### Fetch the database

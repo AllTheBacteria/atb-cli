@@ -166,7 +166,13 @@ Use --project to filter by project prefix first.`,
   atb osf download --dry-run "bakta.*batch.*1\."
 
   # Download to a specific directory
-  atb osf download -o ./data "Assembly.*batch1"`,
+  atb osf download -o ./data "Assembly.*batch1"
+
+  # Download every assembly batch tarball and extract FASTAs as .fa.gz
+  atb osf download --project AllTheBacteria/Assembly --all --extract --compress gz --delete-archive -o ./assemblies
+
+  # Download one batch and extract raw (uncompressed) FASTAs
+  atb osf download "Assembly.*batch.*1\." --extract --compress none`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !all && len(args) == 0 {
 				return cmd.Help()

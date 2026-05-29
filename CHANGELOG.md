@@ -2,6 +2,14 @@
 
 All notable changes to `atb-cli` are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added
+
+- `atb osf download` can now extract downloaded tar archives with new
+  `--extract`, `--compress` (none/gz/xz, default gz), and `--delete-archive`
+  flags — including AllTheBacteria `.tar.xz` assembly tarballs (#18).
+
 ## [v0.16.1](https://github.com/allthebacteria/atb-cli/releases/tag/v0.16.1) - 2026-05-24
 
 ### Fixed
