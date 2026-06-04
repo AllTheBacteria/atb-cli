@@ -284,6 +284,8 @@ atb download --url https://allthebacteria-assemblies.s3.eu-west-2.amazonaws.com/
   --output-dir ./genomes
 ```
 
+Genomes are saved to `--output-dir` when given, otherwise to `download.output_dir` (default `~/atb/genomes`). That is a separate location from the metadata directory (`general.data_dir` / `--data-dir` / `$ATB_DATA_DIR`), so the data-dir setting does not change where downloads land.
+
 ### Summary statistics
 
 ```bash
@@ -559,8 +561,11 @@ atb config init
 # View config
 atb config show
 
-# Set data directory
+# Set the data directory (metadata index: parquet tables + SQLite)
 atb config set general.data_dir /path/to/parquet/files
+
+# Set where downloaded genomes go — a SEPARATE directory from the data dir
+atb config set download.output_dir /path/to/genomes
 
 # Set default download parallelism
 atb config set download.parallel 8
