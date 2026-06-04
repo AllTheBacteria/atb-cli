@@ -13,7 +13,7 @@ import (
 // default resolved at runtime, so users on shared installs see the
 // $ATB_DATA_DIR override reflected in --help.
 func dataDirUsage() string {
-	return fmt.Sprintf("data directory for downloaded files (default %s; override with $ATB_DATA_DIR)", config.DefaultDataDir())
+	return fmt.Sprintf("directory for the local metadata index (default %s; override with $ATB_DATA_DIR)", config.DefaultDataDir())
 }
 
 var (

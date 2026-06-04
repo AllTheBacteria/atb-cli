@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/allthebacteria/atb-cli/internal/config"
 	"github.com/allthebacteria/atb-cli/internal/download"
 )
 
@@ -150,7 +151,7 @@ func newDownloadCmd() *cobra.Command {
 	cmd.Flags().StringVar(&fromFile, "from", "", "CSV/TSV query result file to extract aws_url column from")
 	cmd.Flags().StringVar(&urlsFile, "urls", "", "file with one URL per line")
 	cmd.Flags().StringVar(&singleURL, "url", "", "single URL to download")
-	cmd.Flags().StringVarP(&outputDir, "output-dir", "o", "", "directory to save downloads (default from config)")
+	cmd.Flags().StringVarP(&outputDir, "output-dir", "o", "", fmt.Sprintf("directory to save downloaded genomes (default %s; config key download.output_dir)", config.Default().Download.OutputDir))
 	cmd.Flags().IntVarP(&parallel, "parallel", "p", 0, "parallel downloads (default from config)")
 	cmd.Flags().IntVar(&maxSamples, "max-samples", 0, "limit number of downloads")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print URLs without downloading")
