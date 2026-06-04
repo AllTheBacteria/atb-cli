@@ -2,6 +2,26 @@
 
 All notable changes to `atb-cli` are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [v0.17.1](https://github.com/allthebacteria/atb-cli/releases/tag/v0.17.1) - 2026-06-04
+
+### Fixed
+
+- `atb query --sample-file` now uses the fast SQLite index path instead of
+  scanning the whole table. The index lookup read only the `--samples` slice and
+  ignored accessions loaded from `--sample-file`, so a file-based query fell back
+  to a full scan: the reporter's `--sample-file` run had not finished after a
+  minute, versus ~0.1s for the same 10 accessions passed via `--samples`. Both
+  sources are now merged and de-duplicated through `Filters.SampleAccessions()`
+  before building the `sample_accession IN (...)` clause, so `--sample-file` and
+  `--samples` perform identically (#19).
+- `atb` directory help no longer conflates the metadata index with genome
+  downloads. The `--data-dir` help read "data directory for downloaded files",
+  which led users to expect `--data-dir`/`$ATB_DATA_DIR` to redirect where
+  `atb download` saves assemblies; those are written to the separate
+  `download.output_dir` (`-o/--output-dir`). `--data-dir` now reads "directory
+  for the local metadata index", and `atb download --output-dir` shows its
+  effective default path and the `download.output_dir` config key (#20).
+
 ## [v0.17.0](https://github.com/allthebacteria/atb-cli/releases/tag/v0.17.0) - 2026-05-29
 
 ### Added
