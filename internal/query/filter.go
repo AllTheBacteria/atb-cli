@@ -160,3 +160,21 @@ func (f *Filters) SampleSet() map[string]struct{} {
 	}
 	return set
 }
+
+// SampleAccessions returns the deduplicated union of the Samples slice and any
+// accessions loaded from a sample file, preserving first-seen order. It is the
+// slice counterpart to SampleSet, suitable for building SQL IN clauses.
+func (f *Filters) SampleAccessions() []string {
+	seen := make(map[string]struct{}, len(f.Samples)+len(f.sampleFileEntries))
+	out := make([]string, 0, len(f.Samples)+len(f.sampleFileEntries))
+	for _, list := range [][]string{f.Samples, f.sampleFileEntries} {
+		for _, s := range list {
+			if _, ok := seen[s]; ok {
+				continue
+			}
+			seen[s] = struct{}{}
+			out = append(out, s)
+		}
+	}
+	return out
+}

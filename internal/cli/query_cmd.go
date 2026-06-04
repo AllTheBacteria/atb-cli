@@ -194,7 +194,7 @@ func newQueryCmd() *cobra.Command {
 						MinN50:           filters.MinN50,
 						Dataset:          filters.Dataset,
 						HasAssembly:      filters.HasAssembly,
-						Samples:          filters.Samples,
+						Samples:          filters.SampleAccessions(),
 						Columns:          outCfg.Columns,
 						SortBy:           outCfg.SortBy,
 						SortDesc:         outCfg.SortDesc,

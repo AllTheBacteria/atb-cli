@@ -65,6 +65,31 @@ func TestQueryWithN50(t *testing.T) {
 	}
 }
 
+// TestQuerySampleFileUsesIndex guards against the index path ignoring
+// --sample-file: accessions loaded from the file must restrict the SQLite
+// query just like --samples does, instead of scanning the whole table.
+func TestQuerySampleFileUsesIndex(t *testing.T) {
+	dir := fixtureDirWithIndex(t)
+
+	sampleFile := filepath.Join(t.TempDir(), "samples.txt")
+	if err := os.WriteFile(sampleFile, []byte("SAMN00000001\nSAMN00000002\n"), 0o644); err != nil {
+		t.Fatalf("writing sample file: %v", err)
+	}
+
+	stdout, stderr, err := runCmd("query", "--data-dir", dir, "--sample-file", sampleFile, "--format", "tsv")
+	if err != nil {
+		t.Fatalf("query --sample-file failed: %v\nstderr: %s", err, stderr)
+	}
+
+	lines := strings.Split(strings.TrimRight(stdout, "\n"), "\n")
+	if dataRows := len(lines) - 1; dataRows != 2 {
+		t.Errorf("expected 2 rows from --sample-file via the index, got %d:\n%s", dataRows, stdout)
+	}
+	if !strings.Contains(stdout, "SAMN00000001") || !strings.Contains(stdout, "SAMN00000002") {
+		t.Errorf("expected both requested samples in output, got:\n%s", stdout)
+	}
+}
+
 func TestInfoCommand(t *testing.T) {
 	stdout, _, err := runCmd("info", "--data-dir", fixtureDir, "SAMN00000001")
 	if err != nil {

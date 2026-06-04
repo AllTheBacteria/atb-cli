@@ -309,3 +309,28 @@ func TestSampleSet(t *testing.T) {
 		t.Error("SampleSet missing SAMEA2")
 	}
 }
+
+func TestSampleAccessions(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "samples.txt")
+	if err := os.WriteFile(path, []byte("SAMEA2\nSAMEA3\n"), 0o644); err != nil {
+		t.Fatalf("failed to write sample file: %v", err)
+	}
+
+	f := &Filters{Samples: []string{"SAMEA1", "SAMEA2", "SAMEA1"}, SampleFile: path}
+	if err := f.LoadSampleFile(); err != nil {
+		t.Fatalf("LoadSampleFile returned error: %v", err)
+	}
+
+	// Both flags merged, duplicates removed, first-seen order preserved.
+	got := f.SampleAccessions()
+	want := []string{"SAMEA1", "SAMEA2", "SAMEA3"}
+	if len(got) != len(want) {
+		t.Fatalf("SampleAccessions() length: got %d (%v), want %d (%v)", len(got), got, len(want), want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("SampleAccessions()[%d]: got %q, want %q", i, got[i], want[i])
+		}
+	}
+}
