@@ -17,7 +17,7 @@ func newAGCCmd() *cobra.Command {
 contigs, and extract sequences as FASTA.
 
 Uses the upstream 'agc' binary. Run 'atb agc install' to download it
-(Linux, macOS, and Windows x64).`,
+(Linux/macOS x64+arm64, Windows x64).`,
 	}
 	cmd.AddCommand(newAGCInstallCmd())
 	cmd.AddCommand(newAGCListCmd())
@@ -29,7 +29,7 @@ Uses the upstream 'agc' binary. Run 'atb agc install' to download it
 func newAGCInstallCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "install",
-		Short:   "Download the agc binary (Linux/macOS/Windows-x64)",
+		Short:   "Download the agc binary (Linux/macOS x64+arm64, Windows x64)",
 		Example: `  atb agc install`,
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {

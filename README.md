@@ -497,8 +497,8 @@ sequences as FASTA — by shelling out to the upstream `agc` binary.
 
 `atb` fetches and caches `agc` next to itself; it is never linked into `atb`, so
 the `atb` binary stays statically linked. Prebuilt `agc` binaries exist for
-Linux, macOS, and Windows x64 (Windows arm64 is not published upstream — use the
-x64 build under emulation or WSL).
+Linux and macOS (x64 and arm64) and Windows x64 (Windows arm64 is not published
+upstream — use the x64 build under emulation or WSL).
 
 ```bash
 # One-time: download the agc helper binary
