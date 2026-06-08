@@ -488,6 +488,47 @@ When `--download` is used, the output directory will contain:
 atb sketch info
 ```
 
+### Read AGC archives (`atb agc`)
+
+[AGC](https://github.com/refresh-bio/agc) (Assembled Genomes Compressor) is a
+compact archive format for large collections of assembled genomes. `atb agc`
+reads existing `.agc` archives — listing samples and contigs and extracting
+sequences as FASTA — by shelling out to the upstream `agc` binary.
+
+`atb` fetches and caches `agc` next to itself; it is never linked into `atb`, so
+the `atb` binary stays statically linked. Prebuilt `agc` binaries exist for
+Linux, macOS, and Windows x64 (Windows arm64 is not published upstream — use the
+x64 build under emulation or WSL).
+
+```bash
+# One-time: download the agc helper binary
+atb agc install
+
+# List samples, then one sample's contigs
+atb agc ls genomes.agc
+atb agc ls genomes.agc SAMD00000344
+
+# Archive metadata
+atb agc info genomes.agc
+
+# Extract one contig region to stdout
+atb agc get genomes.agc "contig_1@SAMD00000344:1000-2000"
+
+# Extract whole samples to a file
+atb agc get genomes.agc --sample SAMD00000344 --sample SAMD00000345 -o out.fa
+
+# Extract the entire collection, gzip level 6, 8 threads
+atb agc get genomes.agc --all --gzip 6 -t 8 -o all.fa.gz
+```
+
+`atb agc get` accepts three mutually exclusive selections: positional contig
+queries (`contig[@sample][:from-to]`), `--sample` (whole samples), or `--all`
+(the whole collection). Output streams to stdout unless `-o` is given.
+
+> AllTheBacteria does not currently distribute `.agc` archives; this command
+> works on `.agc` files you already have. It is read-only — it never creates or
+> modifies archives.
+
 ### Browse and download ATB files from OSF
 
 The AllTheBacteria project hosts ~3,000 files on [OSF](https://osf.io/h7wzy/) across 75+ categories (assemblies, annotations, AMR, MLST, protein structures, and more). Browse and download them directly:
