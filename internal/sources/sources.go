@@ -31,7 +31,7 @@ const IndexFilename = "all_atb_files.tsv"
 // TableURLs maps parquet table filenames to their OSF download URLs.
 var TableURLs = map[string]string{
 	// Core tables (downloaded by default with `atb fetch`)
-	"assembly.parquet":       "https://osf.io/download/4ku2n/",       // sample-to-assembly mapping, species calls, quality flags
+	"assembly.parquet":       "https://osf.io/download/4ku2n/",                    // sample-to-assembly mapping, species calls, quality flags
 	"assembly_stats.parquet": "https://osf.io/download/69c51e86801fecc5d6146396/", // N50, total length, contig counts
 	"checkm2.parquet":        "https://osf.io/download/69c51e93cba7111bb21d27f2/", // completeness, contamination, genome size
 	"sylph.parquet":          "https://osf.io/download/69c51f90cba7111bb21d2905/", // species-level profiling results
@@ -91,6 +91,17 @@ const SketchlibVersion = "v0.2.4"
 
 // SketchlibRepo is the GitHub repository for sketchlib releases.
 const SketchlibRepo = "bacpop/sketchlib.rust"
+
+// ---------------------------------------------------------------------------
+// agc binary (Assembled Genomes Compressor)
+// ---------------------------------------------------------------------------
+
+// AGCVersion is the pinned release tag of the agc binary. agc 3.x reads v1/v2/v3
+// archives, so this single pin covers every .agc file in existence today.
+const AGCVersion = "v3.2.3"
+
+// AGCRepo is the GitHub repository for agc releases.
+const AGCRepo = "refresh-bio/agc"
 
 // ---------------------------------------------------------------------------
 // Genome assemblies
