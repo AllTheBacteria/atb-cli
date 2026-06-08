@@ -1,6 +1,11 @@
 package agc
 
 import (
+	"bytes"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -64,4 +69,108 @@ func TestParseListCRLF(t *testing.T) {
 	if !slices.Equal(got, want) {
 		t.Errorf("parseList(crlf) = %v, want %v", got, want)
 	}
+}
+
+func TestGetContigsStreams(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake agc stub is a POSIX shell script")
+	}
+	dir := t.TempDir()
+	stub := "#!/bin/sh\nprintf '>ctg1\\nACGTACGT\\n'\n"
+	if err := os.WriteFile(filepath.Join(dir, "agc"), []byte(stub), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	var buf bytes.Buffer
+	if err := GetContigs("x.agc", []string{"ctg1"}, &buf, Options{Threads: 1}); err != nil {
+		t.Fatalf("GetContigs: %v", err)
+	}
+	if !strings.Contains(buf.String(), ">ctg1") || !strings.Contains(buf.String(), "ACGTACGT") {
+		t.Errorf("streamed output = %q, want a FASTA containing >ctg1 / ACGTACGT", buf.String())
+	}
+}
+
+func TestGetContigsSurfacesError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake agc stub is a POSIX shell script")
+	}
+	dir := t.TempDir()
+	stub := "#!/bin/sh\necho 'boom: bad archive' 1>&2\nexit 3\n"
+	if err := os.WriteFile(filepath.Join(dir, "agc"), []byte(stub), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	var buf bytes.Buffer
+	err := GetContigs("x.agc", []string{"ctg1"}, &buf, Options{Threads: 1})
+	if err == nil {
+		t.Fatal("expected error on non-zero agc exit, got nil")
+	}
+	if !strings.Contains(err.Error(), "boom: bad archive") {
+		t.Errorf("error = %v, want it to include agc stderr", err)
+	}
+}
+
+// TestIntegrationRoundTrip builds a tiny archive with the real agc binary, then
+// asserts list + extract round-trip the sequence. Skipped when agc is absent.
+func TestIntegrationRoundTrip(t *testing.T) {
+	if _, err := FindBinary(); err != nil {
+		t.Skip("agc not installed")
+	}
+	dir := t.TempDir()
+
+	// ~1 kb single-contig FASTA — long enough for agc's default k-mer/segment.
+	var seq strings.Builder
+	const bases = "ACGT"
+	for i := 0; i < 1000; i++ {
+		seq.WriteByte(bases[i%4])
+	}
+	faPath := filepath.Join(dir, "sample1.fa")
+	if err := os.WriteFile(faPath, []byte(">ctg1\n"+seq.String()+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	bin, _ := FindBinary()
+	archive := filepath.Join(dir, "test.agc")
+	if out, err := exec.Command(bin, "create", "-o", archive, faPath).CombinedOutput(); err != nil {
+		t.Fatalf("agc create: %v\n%s", err, out)
+	}
+
+	samples, err := ListSamples(archive)
+	if err != nil {
+		t.Fatalf("ListSamples: %v", err)
+	}
+	if len(samples) == 0 {
+		t.Fatal("ListSamples returned no samples")
+	}
+
+	contigs, err := ListContigs(archive, samples[0])
+	if err != nil {
+		t.Fatalf("ListContigs: %v", err)
+	}
+	if len(contigs) == 0 {
+		t.Fatal("ListContigs returned no contigs")
+	}
+
+	var buf bytes.Buffer
+	if err := GetContigs(archive, []string{contigs[0]}, &buf, Options{Threads: 1}); err != nil {
+		t.Fatalf("GetContigs: %v", err)
+	}
+	if got := stripFASTA(buf.String()); got != seq.String() {
+		t.Errorf("round-trip mismatch: got %d bases, want %d", len(got), seq.Len())
+	}
+}
+
+// stripFASTA returns the concatenated sequence of a FASTA string, dropping
+// header lines and line wrapping.
+func stripFASTA(s string) string {
+	var b strings.Builder
+	for _, line := range strings.Split(s, "\n") {
+		if strings.HasPrefix(line, ">") {
+			continue
+		}
+		b.WriteString(strings.TrimSpace(line))
+	}
+	return b.String()
 }

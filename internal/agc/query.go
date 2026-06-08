@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"runtime"
 	"strconv"
@@ -119,4 +120,50 @@ func Info(archive string) (string, error) {
 		return "", err
 	}
 	return string(out), nil
+}
+
+// runStream runs agc with args, streaming its stdout into w. agc's stderr is
+// forwarded to the process stderr (so progress is visible) and also captured so
+// it can be surfaced in the error on a non-zero exit.
+func runStream(args []string, w io.Writer) error {
+	bin, err := FindBinary()
+	if err != nil {
+		return err
+	}
+	var stderr bytes.Buffer
+	cmd := exec.Command(bin, args...)
+	cmd.Stdout = w
+	cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
+	if err := cmd.Run(); err != nil {
+		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+			return fmt.Errorf("agc %s: %s", args[0], msg)
+		}
+		return fmt.Errorf("agc %s: %w", args[0], err)
+	}
+	return nil
+}
+
+// GetContigs extracts the given contig queries as FASTA into w (agc getctg).
+// Each query is contig[@sample][:from-to].
+func GetContigs(archive string, queries []string, w io.Writer, o Options) error {
+	args := append([]string{"getctg"}, buildGetArgs(o, true)...)
+	args = append(args, archive)
+	args = append(args, queries...)
+	return runStream(args, w)
+}
+
+// GetSamples extracts whole samples as FASTA into w (agc getset).
+func GetSamples(archive string, samples []string, w io.Writer, o Options) error {
+	args := append([]string{"getset"}, buildGetArgs(o, true)...)
+	args = append(args, archive)
+	args = append(args, samples...)
+	return runStream(args, w)
+}
+
+// GetCollection extracts the entire archive as FASTA into w (agc getcol).
+// getcol does not support streaming mode, so Options.Streaming is ignored.
+func GetCollection(archive string, w io.Writer, o Options) error {
+	args := append([]string{"getcol"}, buildGetArgs(o, false)...)
+	args = append(args, archive)
+	return runStream(args, w)
 }
