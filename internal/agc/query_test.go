@@ -135,6 +135,26 @@ func TestGetContigsSurfacesError(t *testing.T) {
 	}
 }
 
+func TestReferenceSample(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake agc stub requires a POSIX shell")
+	}
+	dir := t.TempDir()
+	// agc listref prints the reference sample name with no trailing newline.
+	if err := os.WriteFile(filepath.Join(dir, "agc"), []byte("#!/bin/sh\nprintf 'ref_sample'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	got, err := ReferenceSample("x.agc")
+	if err != nil {
+		t.Fatalf("ReferenceSample: %v", err)
+	}
+	if got != "ref_sample" {
+		t.Errorf("ReferenceSample = %q, want %q", got, "ref_sample")
+	}
+}
+
 // TestIntegrationRoundTrip builds a tiny archive with the real agc binary, then
 // asserts list + extract round-trip the sequence. Skipped when agc is absent.
 func TestIntegrationRoundTrip(t *testing.T) {
