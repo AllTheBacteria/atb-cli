@@ -51,8 +51,9 @@ func buildGetArgs(o Options, supportsStreaming bool) []string {
 	return args
 }
 
-// parseList returns the non-empty, whitespace-trimmed lines of r. agc's list
-// sub-commands print one name per line to stdout.
+// parseList returns the non-empty, whitespace-trimmed lines of r. agc's flat
+// list sub-commands (listset, listref) print one name per line to stdout.
+// listctg is grouped, not flat — use parseContigList for it.
 func parseList(r io.Reader) []string {
 	var out []string
 	sc := bufio.NewScanner(r)
@@ -60,6 +61,26 @@ func parseList(r io.Reader) []string {
 	for sc.Scan() {
 		if line := strings.TrimSpace(sc.Text()); line != "" {
 			out = append(out, line)
+		}
+	}
+	return out
+}
+
+// parseContigList parses agc listctg output, which groups contigs beneath a
+// sample-name header: the sample name sits in column 0 and its contigs are
+// indented under it. It returns the indented contig names (trimmed), skipping
+// the column-0 sample headers and blank lines.
+func parseContigList(r io.Reader) []string {
+	var out []string
+	sc := bufio.NewScanner(r)
+	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for sc.Scan() {
+		raw := sc.Text()
+		if raw == "" || (raw[0] != ' ' && raw[0] != '\t') {
+			continue // blank line, or a column-0 sample header
+		}
+		if name := strings.TrimSpace(raw); name != "" {
+			out = append(out, name)
 		}
 	}
 	return out
@@ -97,7 +118,7 @@ func ListContigs(archive, sample string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return parseList(bytes.NewReader(out)), nil
+	return parseContigList(bytes.NewReader(out)), nil
 }
 
 // ReferenceSample returns the archive's reference sample name (agc listref).

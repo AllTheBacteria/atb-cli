@@ -71,6 +71,29 @@ func TestParseListCRLF(t *testing.T) {
 	}
 }
 
+func TestParseContigList(t *testing.T) {
+	// agc listctg groups contigs under an indented sample header:
+	//   sample1
+	//      ctg1
+	//      ctg2
+	// Only the indented contig names are returned; the header is skipped.
+	got := parseContigList(strings.NewReader("sample1\n   ctg1\n   ctg2\n"))
+	want := []string{"ctg1", "ctg2"}
+	if !slices.Equal(got, want) {
+		t.Errorf("parseContigList = %v, want %v", got, want)
+	}
+}
+
+func TestParseContigListMultiSample(t *testing.T) {
+	// Multiple sample groups, tab-indented contigs. Headers (even with trailing
+	// whitespace) are skipped; every sample's contigs are collected in order.
+	got := parseContigList(strings.NewReader("sampleA\n\tctgX\nsampleB  \n\tctgY\n"))
+	want := []string{"ctgX", "ctgY"}
+	if !slices.Equal(got, want) {
+		t.Errorf("parseContigList(multi) = %v, want %v", got, want)
+	}
+}
+
 func TestGetContigsStreams(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake agc stub is a POSIX shell script")
