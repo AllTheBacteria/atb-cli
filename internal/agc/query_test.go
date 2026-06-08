@@ -2,6 +2,7 @@ package agc
 
 import (
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -39,5 +40,28 @@ func TestBuildGetArgs(t *testing.T) {
 	want = []string{"-t", "1", "-g", "6"}
 	if !slices.Equal(got, want) {
 		t.Errorf("buildGetArgs(gzip-only) = %v, want %v", got, want)
+	}
+}
+
+func TestParseList(t *testing.T) {
+	in := "sample_a\n\n  sample_b  \n\nsample_c\n"
+	got := parseList(strings.NewReader(in))
+	want := []string{"sample_a", "sample_b", "sample_c"}
+	if !slices.Equal(got, want) {
+		t.Errorf("parseList = %v, want %v", got, want)
+	}
+}
+
+func TestParseListEmpty(t *testing.T) {
+	if got := parseList(strings.NewReader("\n  \n")); len(got) != 0 {
+		t.Errorf("parseList(blank) = %v, want empty", got)
+	}
+}
+
+func TestParseListCRLF(t *testing.T) {
+	got := parseList(strings.NewReader("sample_a\r\n\r\n  sample_b  \r\nsample_c\r\n"))
+	want := []string{"sample_a", "sample_b", "sample_c"}
+	if !slices.Equal(got, want) {
+		t.Errorf("parseList(crlf) = %v, want %v", got, want)
 	}
 }
