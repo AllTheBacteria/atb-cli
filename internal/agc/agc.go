@@ -7,6 +7,9 @@ package agc
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"runtime"
 
 	"github.com/allthebacteria/atb-cli/internal/sources"
@@ -41,4 +44,31 @@ func platformAsset(goos, goarch string) (asset string, isZip bool, err error) {
 	default:
 		return "", false, fmt.Errorf("unsupported platform %s/%s for agc", goos, goarch)
 	}
+}
+
+// FindBinary locates the agc binary. Search order:
+//  1. The directory containing the running atb binary.
+//  2. The system PATH.
+//
+// If neither has it, the returned error points at `atb agc install`.
+func FindBinary() (string, error) {
+	if atbPath, err := os.Executable(); err == nil {
+		atbPath, _ = filepath.EvalSymlinks(atbPath)
+		candidate := filepath.Join(filepath.Dir(atbPath), binaryName())
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		}
+	}
+
+	if path, err := exec.LookPath(binaryName()); err == nil {
+		return path, nil
+	}
+
+	return "", fmt.Errorf(`agc not found.
+
+Run 'atb agc install' to download it automatically (Linux, macOS, Windows x64).
+
+Or install manually:
+  Pre-built: https://github.com/%s/releases/tag/%s
+  Conda:     conda install -c bioconda agc`, sources.AGCRepo, sources.AGCVersion)
 }

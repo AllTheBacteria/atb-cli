@@ -1,6 +1,8 @@
 package agc
 
 import (
+	"os"
+	"path/filepath"
 	"runtime"
 	"testing"
 
@@ -59,5 +61,37 @@ func TestPlatformAsset(t *testing.T) {
 			t.Errorf("%s/%s: got (%q, %v), want (%q, %v)",
 				c.goos, c.goarch, asset, isZip, c.wantAsset, c.wantZip)
 		}
+	}
+}
+
+func TestFindBinaryOnPath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("stub is a POSIX shell script named agc")
+	}
+	dir := t.TempDir()
+	stub := filepath.Join(dir, "agc")
+	if err := os.WriteFile(stub, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	// FindBinary checks next to the atb binary first; in tests no agc sits
+	// there, so it resolves via PATH to our stub.
+	got, err := FindBinary()
+	if err != nil {
+		t.Fatalf("FindBinary: %v", err)
+	}
+	if filepath.Base(got) != "agc" {
+		t.Errorf("FindBinary() = %q, want a path ending in agc", got)
+	}
+}
+
+func TestFindBinaryMissing(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PATH isolation differs on Windows")
+	}
+	t.Setenv("PATH", t.TempDir()) // empty dir: no agc anywhere on PATH
+	if _, err := FindBinary(); err == nil {
+		t.Fatal("expected error when agc is not found, got nil")
 	}
 }
