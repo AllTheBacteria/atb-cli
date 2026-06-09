@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -279,5 +280,112 @@ func TestFetchGenomesDownloadFailureFailsGroup(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(outDir, "ACC1.fa")); err != nil {
 		t.Errorf("ACC1.fa from the healthy group should exist: %v", err)
+	}
+}
+
+// buildRealArchive writes a tiny single-sample FASTA, builds a real .agc with
+// the installed agc binary, and returns (archivePath, sampleName). It skips the
+// test when agc is not installed.
+func buildRealArchive(t *testing.T) (string, string) {
+	t.Helper()
+	bin, err := FindBinary()
+	if err != nil {
+		t.Skip("agc not installed")
+	}
+	dir := t.TempDir()
+
+	var seq strings.Builder
+	const bases = "ACGT"
+	for i := 0; i < 1000; i++ {
+		seq.WriteByte(bases[i%4])
+	}
+	faPath := filepath.Join(dir, "sample1.fa")
+	if err := os.WriteFile(faPath, []byte(">ctg1\n"+seq.String()+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	archive := filepath.Join(dir, "src.agc")
+	if out, err := exec.Command(bin, "create", "-o", archive, faPath).CombinedOutput(); err != nil {
+		t.Fatalf("agc create: %v\n%s", err, out)
+	}
+	samples, err := ListSamples(archive)
+	if err != nil || len(samples) == 0 {
+		t.Fatalf("ListSamples: %v (%v)", err, samples)
+	}
+	return archive, samples[0]
+}
+
+func TestFetchGenomesIntegrationRoundTrip(t *testing.T) {
+	srcArchive, sample := buildRealArchive(t)
+	srcData, err := os.ReadFile(srcArchive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/genomes_batch.agc" {
+			w.Write(srcData)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	base := t.TempDir()
+	outDir := filepath.Join(base, "out")
+	groups := map[string][]string{"genomes_batch": {sample}}
+	res, err := FetchGenomes(groups, FetchSpec{
+		OutputDir:  outDir,
+		ArchiveDir: filepath.Join(base, "agc"),
+		BaseURL:    srv.URL + "/",
+		Parallel:   1,
+		Options:    Options{Threads: 1},
+	})
+	if err != nil {
+		t.Fatalf("FetchGenomes: %v", err)
+	}
+	if res.Completed != 1 || res.Failed != 0 {
+		t.Fatalf("result = %+v, want Completed 1 Failed 0", res)
+	}
+	data, err := os.ReadFile(filepath.Join(outDir, sample+".fa"))
+	if err != nil {
+		t.Fatalf("read extracted FASTA: %v", err)
+	}
+	if !strings.Contains(string(data), ">") {
+		t.Errorf("extracted file is not FASTA: %q", data[:min(40, len(data))])
+	}
+}
+
+func TestFetchGenomesCombinePartialFailureRealBinary(t *testing.T) {
+	srcArchive, sample := buildRealArchive(t)
+	srcData, err := os.ReadFile(srcArchive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(srcData)
+	}))
+	defer srv.Close()
+
+	var combined strings.Builder
+	// In combine mode each sample is extracted independently, so an invalid
+	// sample (BOGUS_SAMPLE_NAME) fails only itself while the valid sample is
+	// still written to the combined stream — exactly once, with no partial
+	// bytes from the failed one.
+	groups := map[string][]string{"genomes_batch": {sample, "BOGUS_SAMPLE_NAME"}}
+	res, err := FetchGenomes(groups, FetchSpec{
+		Combine:    true,
+		Combined:   &combined,
+		ArchiveDir: filepath.Join(t.TempDir(), "agc"),
+		BaseURL:    srv.URL + "/",
+		Parallel:   1,
+		Options:    Options{Threads: 1},
+	})
+	if err != nil {
+		t.Fatalf("FetchGenomes: %v", err)
+	}
+	if res.Completed != 1 || res.Failed != 1 {
+		t.Fatalf("result = %+v, want Completed 1 Failed 1", res)
+	}
+	if !strings.Contains(combined.String(), ">") {
+		t.Errorf("combined output should contain the valid sample's FASTA")
 	}
 }
