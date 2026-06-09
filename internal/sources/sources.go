@@ -104,6 +104,36 @@ const AGCVersion = "v3.2.3"
 const AGCRepo = "refresh-bio/agc"
 
 // ---------------------------------------------------------------------------
+// AGC genome archives (PROVISIONAL)
+// ---------------------------------------------------------------------------
+// AllTheBacteria is moving its genome batches from miniphy .tar.xz to AGC
+// archives. The host below is the prototype's CESGO endpoint; OSF is still
+// under discussion. These are intentionally isolated here so switching hosts
+// (or to OSF's per-file /download/<id>/ shape) is a one-line change.
+// Reference prototype: https://github.com/tam-km-truong/atb_agc_extract
+// Override at runtime via config keys agc.archive_map_url / agc.archive_base_url.
+
+// AGCArchiveMapURL is the whitespace-delimited sample->archive map (~90 MB):
+// column 1 is the sample accession, column 2 is the archive name (no .agc).
+const AGCArchiveMapURL = "https://data-access.cesgo.org/index.php/s/9WuPWJL25cYYZml/download"
+
+// AGCArchiveMapFilename is the local cache filename for the archive map.
+const AGCArchiveMapFilename = "agc_file_list.txt"
+
+// AGCArchiveBaseURL is the prefix for downloading a single .agc archive;
+// ArchiveURL appends "<archive>.agc".
+const AGCArchiveBaseURL = "https://data-access.cesgo.org/index.php/s/w8ylLnVjCokP0B5/download?path=%2F&files="
+
+// AGCArchiveSubdir is the <data-dir> subdirectory holding cached archives and
+// the archive map. Mirrors SketchSubdir.
+const AGCArchiveSubdir = "agc"
+
+// ArchiveURL returns the download URL for the named archive (without ".agc").
+func ArchiveURL(archive string) string {
+	return AGCArchiveBaseURL + archive + ".agc"
+}
+
+// ---------------------------------------------------------------------------
 // Genome assemblies
 // ---------------------------------------------------------------------------
 
