@@ -126,3 +126,46 @@ func TestFetchMapHTTPError(t *testing.T) {
 		t.Fatal("expected error on HTTP 404, got nil")
 	}
 }
+
+func seedMap(t *testing.T, dataDir, body string) {
+	t.Helper()
+	cacheDir := filepath.Join(dataDir, sources.AGCArchiveSubdir)
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cacheDir, sources.AGCArchiveMapFilename), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestResolveArchivesGroupsAndReportsUnresolved(t *testing.T) {
+	dataDir := t.TempDir()
+	seedMap(t, dataDir,
+		"ACC1 batch_a\nACC2 batch_b\nACC3 batch_a\n")
+
+	groups, unresolved, err := ResolveArchives(dataDir, "", []string{"ACC1", "ACC3", "ACC2", "MISSING"}, false)
+	if err != nil {
+		t.Fatalf("ResolveArchives: %v", err)
+	}
+	// batch_a holds ACC1 and ACC3, in input order; batch_b holds ACC2.
+	if len(groups["batch_a"]) != 2 || groups["batch_a"][0] != "ACC1" || groups["batch_a"][1] != "ACC3" {
+		t.Errorf("batch_a group wrong: %v", groups["batch_a"])
+	}
+	if len(groups["batch_b"]) != 1 || groups["batch_b"][0] != "ACC2" {
+		t.Errorf("batch_b group wrong: %v", groups["batch_b"])
+	}
+	if len(unresolved) != 1 || unresolved[0].Accession != "MISSING" {
+		t.Errorf("unresolved wrong: %v", unresolved)
+	}
+}
+
+func TestResolveArchivesMapUnreachable(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "nope", http.StatusNotFound)
+	}))
+	defer srv.Close()
+	// force=true skips the (absent) cache and fails on the bad URL.
+	if _, _, err := ResolveArchives(t.TempDir(), srv.URL, []string{"ACC1"}, true); err == nil {
+		t.Fatal("expected error when map is unreachable, got nil")
+	}
+}

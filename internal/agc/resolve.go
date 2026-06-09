@@ -108,3 +108,27 @@ func FetchMap(cacheDir, mapURL string, force bool) (ArchiveMap, error) {
 	defer f.Close()
 	return ParseMap(f)
 }
+
+// ResolveArchives maps each accession to its archive using the companion map
+// (cached under <dataDir>/agc), grouping accessions by archive and preserving
+// input order within each group. Accessions absent from the map are returned in
+// unresolved rather than failing the whole call. refresh=true re-downloads the
+// map. The SQLite index fast-path is intentionally deferred; this signature is
+// forward-compatible with adding it later.
+func ResolveArchives(dataDir, mapURL string, accessions []string, refresh bool) (groups map[string][]string, unresolved []Unresolved, err error) {
+	cacheDir := filepath.Join(dataDir, sources.AGCArchiveSubdir)
+	m, err := FetchMap(cacheDir, mapURL, refresh)
+	if err != nil {
+		return nil, nil, err
+	}
+	groups = make(map[string][]string)
+	for _, acc := range accessions {
+		archive, ok := m[acc]
+		if !ok {
+			unresolved = append(unresolved, Unresolved{Accession: acc, Reason: "not found in archive map"})
+			continue
+		}
+		groups[archive] = append(groups[archive], acc)
+	}
+	return groups, unresolved, nil
+}
