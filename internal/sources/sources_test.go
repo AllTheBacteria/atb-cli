@@ -1,6 +1,10 @@
 package sources
 
-import "testing"
+import (
+	"path/filepath"
+	"strings"
+	"testing"
+)
 
 func TestArchiveURL(t *testing.T) {
 	got := ArchiveURL("atb_batch_42")
@@ -11,10 +15,16 @@ func TestArchiveURL(t *testing.T) {
 }
 
 func TestArchiveMapDefaultsPresent(t *testing.T) {
-	if AGCArchiveMapURL == "" || AGCArchiveBaseURL == "" {
-		t.Fatal("provisional AGC archive URLs must be set")
+	if !strings.HasPrefix(AGCArchiveMapURL, "https://") {
+		t.Errorf("AGCArchiveMapURL should be an https URL, got %q", AGCArchiveMapURL)
 	}
-	if AGCArchiveMapFilename == "" || AGCArchiveSubdir == "" {
-		t.Fatal("AGC archive map filename and subdir must be set")
+	if !strings.HasPrefix(AGCArchiveBaseURL, "https://") || !strings.Contains(AGCArchiveBaseURL, "files=") {
+		t.Errorf("AGCArchiveBaseURL should be an https URL with the files= selector, got %q", AGCArchiveBaseURL)
+	}
+	if filepath.Ext(AGCArchiveMapFilename) != ".txt" {
+		t.Errorf("AGCArchiveMapFilename should be a .txt file, got %q", AGCArchiveMapFilename)
+	}
+	if AGCArchiveSubdir == "" || strings.ContainsAny(AGCArchiveSubdir, `/\`) {
+		t.Errorf("AGCArchiveSubdir should be a bare subdir name, got %q", AGCArchiveSubdir)
 	}
 }
