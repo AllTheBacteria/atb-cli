@@ -15,6 +15,7 @@ type Config struct {
 	General  GeneralConfig  `toml:"general"`
 	Fetch    FetchConfig    `toml:"fetch"`
 	Download DownloadConfig `toml:"download"`
+	AGC      AGCConfig      `toml:"agc"`
 }
 
 // GeneralConfig holds general application settings.
@@ -35,6 +36,14 @@ type DownloadConfig struct {
 	OutputDir      string `toml:"output_dir"`
 	CheckDiskSpace bool   `toml:"check_disk_space"`
 	MinFreeSpaceGB int    `toml:"min_free_space_gb"`
+}
+
+// AGCConfig holds overrides for AGC genome-archive retrieval. Empty values mean
+// "use the provisional defaults in internal/sources".
+type AGCConfig struct {
+	ArchiveMapURL  string `toml:"archive_map_url"`
+	ArchiveBaseURL string `toml:"archive_base_url"`
+	ArchiveDir     string `toml:"archive_dir"`
 }
 
 // DefaultDataDir returns the OS-standard data directory for ATB.

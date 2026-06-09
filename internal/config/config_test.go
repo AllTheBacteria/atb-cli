@@ -233,3 +233,36 @@ func TestExpandHome(t *testing.T) {
 		}
 	}
 }
+
+func TestAGCConfigRoundTrip(t *testing.T) {
+	cfg := config.Default()
+	cfg.AGC.ArchiveDir = "/big/disk/agc"
+	cfg.AGC.ArchiveMapURL = "https://example.test/map"
+	cfg.AGC.ArchiveBaseURL = "https://example.test/files="
+
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := config.Save(cfg, path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	got, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got.AGC.ArchiveDir != "/big/disk/agc" ||
+		got.AGC.ArchiveMapURL != "https://example.test/map" ||
+		got.AGC.ArchiveBaseURL != "https://example.test/files=" {
+		t.Errorf("AGC config did not round-trip: %+v", got.AGC)
+	}
+}
+
+func TestAGCConfigDefaultsEmpty(t *testing.T) {
+	// A config with no [agc] section loads cleanly with an empty AGCConfig
+	// (empty means "use the sources defaults").
+	cfg, err := config.Load(filepath.Join(t.TempDir(), "missing.toml"))
+	if err != nil {
+		t.Fatalf("Load missing: %v", err)
+	}
+	if cfg.AGC.ArchiveDir != "" || cfg.AGC.ArchiveMapURL != "" || cfg.AGC.ArchiveBaseURL != "" {
+		t.Errorf("expected empty AGCConfig by default, got %+v", cfg.AGC)
+	}
+}
