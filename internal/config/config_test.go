@@ -256,13 +256,17 @@ func TestAGCConfigRoundTrip(t *testing.T) {
 }
 
 func TestAGCConfigDefaultsEmpty(t *testing.T) {
-	// A config with no [agc] section loads cleanly with an empty AGCConfig
-	// (empty means "use the sources defaults").
+	// The feature relies on an absent [agc] section meaning "use the sources
+	// defaults", i.e. a zero-valued AGCConfig. Assert that invariant directly
+	// for Default() and for a freshly loaded config with no [agc] section.
+	if got := config.Default().AGC; got != (config.AGCConfig{}) {
+		t.Errorf("Default() must leave AGCConfig zero, got %+v", got)
+	}
 	cfg, err := config.Load(filepath.Join(t.TempDir(), "missing.toml"))
 	if err != nil {
 		t.Fatalf("Load missing: %v", err)
 	}
-	if cfg.AGC.ArchiveDir != "" || cfg.AGC.ArchiveMapURL != "" || cfg.AGC.ArchiveBaseURL != "" {
-		t.Errorf("expected empty AGCConfig by default, got %+v", cfg.AGC)
+	if cfg.AGC != (config.AGCConfig{}) {
+		t.Errorf("a config with no [agc] section must yield a zero AGCConfig, got %+v", cfg.AGC)
 	}
 }
