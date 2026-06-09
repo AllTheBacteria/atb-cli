@@ -12,9 +12,12 @@ import (
 func newAGCCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "agc",
-		Short: "Read sequences from AGC genome archives",
-		Long: `Read AGC (Assembled Genomes Compressor) archives: list samples and
-contigs, and extract sequences as FASTA.
+		Short: "Low-level tools for local AGC archive files",
+		Long: `Low-level tools for AGC (Assembled Genomes Compressor) archives you
+already have on disk: list samples and contigs, and extract sequences as FASTA.
+
+To fetch ATB genomes by sample accession (download the right archive and extract
+for you), use 'atb fetch-genomes' instead — that is the command most users want.
 
 Uses the upstream 'agc' binary. Run 'atb agc install' to download it
 (Linux/macOS x64+arm64, Windows x64).`,
