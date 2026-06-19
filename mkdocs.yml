@@ -76,3 +76,7 @@ nav:
   - LLM Integration (MCP): mcp.md
   - Reference:
       - CLI commands: reference/cli/
+      - Output formats: reference/output-formats.md
+      - Available columns: reference/columns.md
+      - Performance: reference/performance.md
+      - Data sources: reference/data-sources.md
