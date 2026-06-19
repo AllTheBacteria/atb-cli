@@ -80,3 +80,5 @@ nav:
       - Available columns: reference/columns.md
       - Performance: reference/performance.md
       - Data sources: reference/data-sources.md
+  - Contributing: contributing.md
+  - Changelog: changelog.md
