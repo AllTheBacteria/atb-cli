@@ -79,7 +79,7 @@ make build    # binary at ./bin/atb
 
 The repository ships a `Dockerfile` at its root for containerized use. You can build and run `atb` inside a container without installing Go or the binary directly on the host.
 
-For MCP-server deployment with Docker Compose (`docker compose up -d`), see [MCP server](../guides/mcp.md) — that page covers the full setup including public access, SSE endpoints, and cloud deployment options.
+For MCP-server deployment with Docker Compose (`docker compose up -d`), see [MCP server](../mcp.md) — that page covers the full setup including public access, SSE endpoints, and cloud deployment options.
 
 ---
 
