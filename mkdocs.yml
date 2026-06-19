@@ -67,5 +67,8 @@ nav:
       - Querying genomes: guides/query.md
       - AMR genes: guides/amr.md
       - MLST: guides/mlst.md
+      - Finding closest genomes: guides/sketch.md
+      - Downloading assemblies: guides/download.md
+      - Browsing OSF files: guides/osf.md
   - Reference:
       - CLI commands: reference/cli/
