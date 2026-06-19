@@ -21,8 +21,6 @@ Download the file for your platform, extract, and place the `atb` binary (or `at
 
 ## One-line installer (Linux/macOS)
 
-**One-line install** (Linux/macOS):
-
 ```bash
 curl -fsSL https://raw.githubusercontent.com/allthebacteria/atb-cli/main/install.sh | bash
 ```
