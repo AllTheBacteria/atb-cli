@@ -63,5 +63,9 @@ nav:
       - Installation: getting-started/installation.md
       - Quick Start: getting-started/quickstart.md
       - Updating: getting-started/updating.md
+  - Guides:
+      - Querying genomes: guides/query.md
+      - AMR genes: guides/amr.md
+      - MLST: guides/mlst.md
   - Reference:
       - CLI commands: reference/cli/
