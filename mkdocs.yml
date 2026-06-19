@@ -73,5 +73,6 @@ nav:
       - Summary statistics: guides/summarise.md
       - Fetching & indexing data: guides/fetch-and-index.md
       - Configuration: guides/configuration.md
+  - LLM Integration (MCP): mcp.md
   - Reference:
       - CLI commands: reference/cli/
