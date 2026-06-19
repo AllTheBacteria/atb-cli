@@ -70,5 +70,8 @@ nav:
       - Finding closest genomes: guides/sketch.md
       - Downloading assemblies: guides/download.md
       - Browsing OSF files: guides/osf.md
+      - Summary statistics: guides/summarise.md
+      - Fetching & indexing data: guides/fetch-and-index.md
+      - Configuration: guides/configuration.md
   - Reference:
       - CLI commands: reference/cli/
