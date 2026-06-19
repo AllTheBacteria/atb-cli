@@ -10,7 +10,7 @@ GOFLAGS    ?=
 # (e.g. RHEL 7/8/9, Debian 11). All dependencies are pure-Go.
 export CGO_ENABLED ?= 0
 
-.PHONY: build test lint clean fixtures
+.PHONY: build test lint clean fixtures docs docs-serve docs-build
 
 build:
 	mkdir -p $(BIN_DIR)
@@ -27,3 +27,12 @@ clean:
 
 fixtures:
 	$(GO) run ./internal/testdata/gen/... 2>/dev/null || true
+
+docs:
+	$(GO) run ./cmd/gen-docs
+
+docs-serve: docs
+	mkdocs serve
+
+docs-build: docs
+	mkdocs build --strict

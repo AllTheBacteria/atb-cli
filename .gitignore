@@ -8,3 +8,4 @@ testdata/fixtures/*.parquet
 .env.local
 .gitnexus
 docs/superpowers/
+site/
