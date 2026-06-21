@@ -6,7 +6,7 @@ Single binary, no dependencies.
 
 **Supported platforms:** Linux, macOS, Windows (amd64 and arm64)
 
-**Full documentation: <https://atb-cli.readthedocs.io>**
+**Full documentation: <https://allthebacteria.github.io/atb-cli/>** (also on [Read the Docs](https://atb-cli.readthedocs.io))
 
 ## Install
 
@@ -19,7 +19,7 @@ curl -fsSL https://raw.githubusercontent.com/allthebacteria/atb-cli/main/install
 Pre-built binaries for all platforms are also available on the
 [releases page](https://github.com/allthebacteria/atb-cli/releases/latest).
 
-See the [installation guide](https://atb-cli.readthedocs.io/en/latest/getting-started/installation/) for all methods.
+See the [installation guide](https://allthebacteria.github.io/atb-cli/getting-started/installation/) for all methods.
 
 ## Quick Start
 
@@ -31,13 +31,13 @@ atb fetch
 atb query --species "Escherichia coli" --hq-only --limit 10
 ```
 
-See the [quick start guide](https://atb-cli.readthedocs.io/en/latest/getting-started/quickstart/) for next steps.
+See the [quick start guide](https://allthebacteria.github.io/atb-cli/getting-started/quickstart/) for next steps.
 
 ## Documentation
 
-- [Guides](https://atb-cli.readthedocs.io/en/latest/guides/query/) — querying genomes, AMR, MLST, sketch distances, downloads, and more
-- [CLI reference](https://atb-cli.readthedocs.io/en/latest/reference/cli/atb/) — every command and flag
-- [LLM integration (MCP)](https://atb-cli.readthedocs.io/en/latest/mcp/) — use `atb` as an MCP server with Claude, ChatGPT, Cursor, and others
+- [Guides](https://allthebacteria.github.io/atb-cli/guides/query/) — querying genomes, AMR, MLST, sketch distances, downloads, and more
+- [CLI reference](https://allthebacteria.github.io/atb-cli/reference/cli/atb/) — every command and flag
+- [LLM integration (MCP)](https://allthebacteria.github.io/atb-cli/mcp/) — use `atb` as an MCP server with Claude, ChatGPT, Cursor, and others
 
 ## Credits
 
