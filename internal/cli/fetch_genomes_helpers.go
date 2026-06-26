@@ -6,7 +6,18 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"github.com/allthebacteria/atb-cli/internal/sources"
 )
+
+// resolveOSFNode picks the OSF node id for a by-species (Mode A) crawl:
+// the --osf-node flag wins, then the configured agc.osf_node, and finally the
+// staging-node default in sources. The staging id ("z7q5y") therefore appears
+// only in sources, never in command logic, so promotion to production is a
+// config edit (ADR §2.2/§4.9).
+func resolveOSFNode(flag, cfgNode string) string {
+	return firstNonEmpty(flag, cfgNode, sources.AGCTestNodeID)
+}
 
 // readAccessionsFromFile reads sample accessions from a CSV/TSV file (using the
 // sample_accession column when a header is present) or, for a headerless file,

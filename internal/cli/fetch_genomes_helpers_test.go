@@ -5,7 +5,25 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+
+	"github.com/allthebacteria/atb-cli/internal/sources"
 )
+
+func TestResolveOSFNode(t *testing.T) {
+	// Flag wins over everything.
+	if got := resolveOSFNode("flagnode", "cfgnode"); got != "flagnode" {
+		t.Errorf("flag should win: got %q, want flagnode", got)
+	}
+	// Config used when no flag.
+	if got := resolveOSFNode("", "cfgnode"); got != "cfgnode" {
+		t.Errorf("config should be used: got %q, want cfgnode", got)
+	}
+	// Falls back to the staging-node default so z7q5y is never hardcoded in
+	// command logic — it lives only in sources.
+	if got := resolveOSFNode("", ""); got != sources.AGCTestNodeID {
+		t.Errorf("default should be sources.AGCTestNodeID (%q), got %q", sources.AGCTestNodeID, got)
+	}
+}
 
 func TestReadAccessionsTSVHeader(t *testing.T) {
 	dir := t.TempDir()

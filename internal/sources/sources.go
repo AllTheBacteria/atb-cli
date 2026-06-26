@@ -134,6 +134,36 @@ func ArchiveURL(archive string) string {
 }
 
 // ---------------------------------------------------------------------------
+// AGC genome archives over OSF (TEST DATA — node z7q5y)
+// ---------------------------------------------------------------------------
+// The AGC batches are staged on the OSF "ATB testing" node z7q5y under the
+// agc_batches/ folder. Unlike the master index, these batches are NOT
+// registered in all_atb_files.tsv. While the data is under test, atb builds a
+// SEPARATE index TSV by crawling the OSF API — each batch carries its own
+// opaque /download/<guid>/ URL, md5, and size. Keeping this isolated from the
+// master index lets the test data be promoted (or discarded) without touching
+// production paths. See docs/design/agc-osf-test-implementation.md.
+
+// OSFAPIBase is the root of the OSF REST API (v2).
+const OSFAPIBase = "https://api.osf.io/v2"
+
+// AGCTestNodeID is the OSF node hosting the AGC test batches ("ATB testing").
+const AGCTestNodeID = "z7q5y"
+
+// AGCBatchesFolder is the folder on the node holding the .agc batch files.
+const AGCBatchesFolder = "agc_batches"
+
+// AGCIndexFilename is the local cache filename for the crawled AGC index TSV,
+// stored in <data-dir>/agc/ alongside the cached archives.
+const AGCIndexFilename = "atb_agc_files.tsv"
+
+// OSFNodeFilesURL returns the osfstorage root listing URL for an OSF node, the
+// entry point for crawling its folders.
+func OSFNodeFilesURL(nodeID string) string {
+	return OSFAPIBase + "/nodes/" + nodeID + "/files/osfstorage/"
+}
+
+// ---------------------------------------------------------------------------
 // Genome assemblies
 // ---------------------------------------------------------------------------
 

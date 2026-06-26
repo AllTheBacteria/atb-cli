@@ -28,10 +28,104 @@ func TestFetchGenomesHelpListsFlags(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fetch-genomes --help: %v", err)
 	}
-	for _, want := range []string{"--from", "--combine", "--archive-dir", "--dry-run"} {
+	for _, want := range []string{"--from", "--combine", "--archive-dir", "--dry-run", "--species", "--agc-index"} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("expected %q in --help, got:\n%s", want, stdout)
 		}
+	}
+}
+
+// agcIndexTSV is the 6-column separate AGC index (atb_agc_files.tsv layout): it
+// reuses the master-index columns so osf.ParseIndex round-trips it. Tests feed it
+// via --agc-index to exercise Mode A without any network I/O.
+const agcIndexTSV = "project\tproject_id\tfilename\turl\tmd5\tsize_mb\n" +
+	"Acinetobacter_baylyi\tz7q5y\tAcinetobacter_baylyi_global_ordered_0001.agc\thttps://osf.io/download/aaa/\tmd5aaa\t3.890000\n" +
+	"Acinetobacter_baylyi\tz7q5y\tAcinetobacter_baylyi_global_ordered_0002.agc\thttps://osf.io/download/bbb/\tmd5bbb\t4.100000\n" +
+	"Streptococcus_suis_AA\tz7q5y\tStreptococcus_suis_AA_global_ordered_0001.agc\thttps://osf.io/download/ccc/\tmd5ccc\t10.400000\n"
+
+func writeAGCIndex(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "atb_agc_files.tsv")
+	if err := os.WriteFile(path, []byte(agcIndexTSV), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestFetchGenomesSpeciesDryRun(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake agc stub requires a POSIX shell")
+	}
+	dir := t.TempDir()
+	withFakeAGC(t, "#!/bin/sh\nexit 0\n")
+	idxPath := writeAGCIndex(t)
+
+	stdout, stderr, err := runCmd("fetch-genomes", "--data-dir", dir,
+		"--species", "Acinetobacter baylyi", "--agc-index", idxPath, "--dry-run")
+	if err != nil {
+		t.Fatalf("species dry-run failed: %v\nstderr: %s", err, stderr)
+	}
+	combined := stdout + stderr
+	// Both A. baylyi batches must be listed; the unrelated species must not.
+	for _, want := range []string{
+		"Acinetobacter_baylyi_global_ordered_0001",
+		"Acinetobacter_baylyi_global_ordered_0002",
+	} {
+		if !strings.Contains(combined, want) {
+			t.Errorf("dry-run should list %q, got:\n%s", want, combined)
+		}
+	}
+	if strings.Contains(combined, "Streptococcus") {
+		t.Errorf("dry-run must not list batches of other species, got:\n%s", combined)
+	}
+	if !strings.Contains(strings.ToLower(combined), "dry-run") {
+		t.Errorf("dry-run should announce itself, got:\n%s", combined)
+	}
+	// Nothing may be downloaded in a dry-run.
+	if _, err := os.Stat(filepath.Join(dir, sources.AGCArchiveSubdir, "Acinetobacter_baylyi_global_ordered_0001.agc")); !os.IsNotExist(err) {
+		t.Errorf("dry-run must not download archives")
+	}
+	// stdout is reserved for FASTA payload; diagnostics belong on stderr.
+	if stdout != "" {
+		t.Errorf("dry-run must keep stdout empty, got:\n%q", stdout)
+	}
+}
+
+func TestFetchGenomesSpeciesNoMatch(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake agc stub requires a POSIX shell")
+	}
+	dir := t.TempDir()
+	withFakeAGC(t, "#!/bin/sh\nexit 0\n")
+	idxPath := writeAGCIndex(t)
+
+	_, stderr, err := runCmd("fetch-genomes", "--data-dir", dir,
+		"--species", "Escherichia coli", "--agc-index", idxPath, "--dry-run")
+	if err == nil {
+		t.Fatal("expected an error when no batch matches the species")
+	}
+	msg := err.Error() + stderr
+	if !strings.Contains(msg, "Escherichia coli") {
+		t.Errorf("error should name the species, got: %v / %s", err, stderr)
+	}
+}
+
+func TestFetchGenomesSpeciesRejectsAccessions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake agc stub requires a POSIX shell")
+	}
+	dir := t.TempDir()
+	withFakeAGC(t, "#!/bin/sh\nexit 0\n")
+	idxPath := writeAGCIndex(t)
+
+	// --species is its own access mode; mixing it with accessions is ambiguous.
+	_, _, err := runCmd("fetch-genomes", "--data-dir", dir,
+		"--species", "Acinetobacter baylyi", "--agc-index", idxPath, "SAMD00000344")
+	if err == nil {
+		t.Fatal("expected an error when --species is combined with accession arguments")
+	}
+	if !strings.Contains(err.Error(), "--species") {
+		t.Errorf("error should mention --species, got: %v", err)
 	}
 }
 

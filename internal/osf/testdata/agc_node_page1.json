@@ -1,0 +1,44 @@
+{
+  "data": [
+    {
+      "id": "6a35c88e_folder",
+      "type": "files",
+      "attributes": {
+        "name": "nested_subfolder",
+        "kind": "folder",
+        "size": null,
+        "extra": {}
+      },
+      "links": {}
+    },
+    {
+      "id": "6a35c9b1cccfb0aaef166825",
+      "type": "files",
+      "attributes": {
+        "name": "Acinetobacter_baylyi_global_ordered_0001.agc",
+        "kind": "file",
+        "size": 3890981,
+        "extra": { "hashes": { "md5": "7be632ec46828a45a4d6d01d77b8099d", "sha256": "ignored" } }
+      },
+      "links": { "download": "https://osf.io/download/6a35c9b1cccfb0aaef166825/" }
+    },
+    {
+      "id": "6a35f62e32d278c44d16676f",
+      "type": "files",
+      "attributes": {
+        "name": "Streptococcus_suis_AA_global_ordered_0001.agc",
+        "kind": "file",
+        "size": 10448807,
+        "extra": { "hashes": { "md5": "6230f10a94cb227bb78c319eb73bdd7b" } }
+      },
+      "links": { "download": "https://osf.io/download/6a35f62e32d278c44d16676f/" }
+    }
+  ],
+  "links": {
+    "first": null,
+    "prev": null,
+    "next": "https://api.osf.io/v2/nodes/z7q5y/files/osfstorage/6a35c88e71b808fa8816675d/?page=2",
+    "last": "https://api.osf.io/v2/nodes/z7q5y/files/osfstorage/6a35c88e71b808fa8816675d/?page=2"
+  },
+  "meta": { "version": "2.0" }
+}

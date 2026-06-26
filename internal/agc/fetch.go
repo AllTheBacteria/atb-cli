@@ -14,14 +14,15 @@ import (
 
 // FetchSpec configures a FetchGenomes run.
 type FetchSpec struct {
-	Combine    bool      // one combined stream instead of per-sample files
-	OutputDir  string    // per-sample output directory (ignored when Combine)
-	Combined   io.Writer // combined output target (used when Combine)
-	ArchiveDir string    // where .agc archives are cached
-	BaseURL    string    // archive base URL; "" uses sources.ArchiveURL
-	Parallel   int       // parallel archive downloads
-	Force      bool      // re-download archives even if cached
-	Options    Options   // agc getset flags
+	Combine    bool                  // one combined stream instead of per-sample files
+	OutputDir  string                // per-sample output directory (ignored when Combine)
+	Combined   io.Writer             // combined output target (used when Combine)
+	ArchiveDir string                // where .agc archives are cached
+	BaseURL    string                // archive base URL; "" uses sources.ArchiveURL
+	Refs       map[string]ArchiveRef // archive name -> OSF {URL, md5}; overrides BaseURL per archive
+	Parallel   int                   // parallel archive downloads
+	Force      bool                  // re-download archives even if cached
+	Options    Options               // agc getset/getcol flags
 }
 
 // FetchResult summarises a FetchGenomes run.
@@ -55,24 +56,42 @@ func archiveURL(baseURL, archive string) string {
 	return baseURL + archive + ".agc"
 }
 
+// buildDownloadTasks renders one download task per archive and a reverse
+// url->archive map for error attribution. When spec.Refs has an entry for the
+// archive, its OSF download URL and md5 are used (the URL is an opaque GUID that
+// cannot be constructed from the name, and the md5 enables integrity checking);
+// otherwise the URL is built from spec.BaseURL and no md5 is set.
+func buildDownloadTasks(archives []string, spec FetchSpec) ([]download.FileTask, map[string]string) {
+	urlToArchive := make(map[string]string, len(archives))
+	tasks := make([]download.FileTask, 0, len(archives))
+	for _, a := range archives {
+		u := archiveURL(spec.BaseURL, a)
+		md5 := ""
+		if ref, ok := spec.Refs[a]; ok && ref.URL != "" {
+			u = ref.URL
+			md5 = ref.MD5
+		}
+		urlToArchive[u] = a
+		tasks = append(tasks, download.FileTask{URL: u, Filename: a + ".agc", MD5: md5})
+	}
+	return tasks, urlToArchive
+}
+
 // downloadArchives fetches each archive cache-first into spec.ArchiveDir and
 // returns the local path of every archive that is now present, plus a map of
 // archive name -> download error for any that failed. Force removes a cached
 // copy first so it is re-downloaded.
 func downloadArchives(archives []string, spec FetchSpec) (paths map[string]string, errs map[string]string) {
-	urlToArchive := make(map[string]string, len(archives))
-	tasks := make([]download.FileTask, 0, len(archives))
-	for _, a := range archives {
-		u := archiveURL(spec.BaseURL, a)
-		urlToArchive[u] = a
-		if spec.Force {
+	if spec.Force {
+		for _, a := range archives {
 			// Best-effort: a missing cache file is the desired end state, so an
 			// error here (typically the file is simply absent) is ignored; the
 			// download below re-creates it.
 			os.Remove(filepath.Join(spec.ArchiveDir, a+".agc"))
 		}
-		tasks = append(tasks, download.FileTask{URL: u, Filename: a + ".agc"})
 	}
+
+	tasks, urlToArchive := buildDownloadTasks(archives, spec)
 
 	dl := download.New(download.Config{OutputDir: spec.ArchiveDir, Parallel: spec.Parallel})
 	res := dl.DownloadAllFiles(tasks)
@@ -129,18 +148,25 @@ func FetchGenomes(groups map[string][]string, spec FetchSpec) (FetchResult, erro
 	for _, archive := range archives {
 		accs := groups[archive]
 		if msg, bad := dlErrs[archive]; bad {
-			for _, acc := range accs {
-				result.Failed++
-				result.Errors = append(result.Errors, FetchError{
-					Accession: acc,
-					Error:     fmt.Sprintf("download %s.agc: %s", archive, msg),
-				})
+			dlErr := fmt.Sprintf("download %s.agc: %s", archive, msg)
+			if len(accs) == 0 {
+				// Whole-archive group (Mode A): the batch is the unit of work, so
+				// attribute the failure to the batch name rather than dropping it.
+				result.fail(archive, dlErr)
+			} else {
+				for _, acc := range accs {
+					result.fail(acc, dlErr)
+				}
 			}
 			continue
 		}
-		if spec.Combine {
+		switch {
+		case len(accs) == 0:
+			// No specific accessions requested: extract the entire batch (getcol).
+			extractWholeArchive(paths[archive], archive, spec, &result)
+		case spec.Combine:
 			extractCombined(paths[archive], accs, spec, &result)
-		} else {
+		default:
 			extractPerSample(paths[archive], accs, spec, &result)
 		}
 	}
@@ -192,6 +218,52 @@ func extractCombined(archive string, accs []string, spec FetchSpec, result *Fetc
 		}
 		result.Completed++
 	}
+}
+
+// archiveOutputName is the per-batch output filename for whole-archive mode.
+func archiveOutputName(archive string, gzip bool) string {
+	if gzip {
+		return archive + ".fa.gz"
+	}
+	return archive + ".fa"
+}
+
+// extractWholeArchive extracts an entire batch as FASTA with `agc getcol`, the
+// path Mode A (by-species) takes when every genome in the batch is wanted. In
+// combine mode it streams getcol straight into spec.Combined: whole-archive
+// output cannot be rewound and a decompressed batch can be many gigabytes, so
+// buffering to isolate a mid-stream failure is impractical — a failure is
+// reported per batch (the unit of work here) and may leave partial bytes in the
+// combined stream. In per-sample mode it writes one <archive>.fa[.gz] file per
+// batch and removes a partial file on failure. archiveName identifies the batch
+// in results (continue-on-error, mirroring the per-accession paths).
+func extractWholeArchive(archivePath, archiveName string, spec FetchSpec, result *FetchResult) {
+	if spec.Combine {
+		if err := GetCollection(archivePath, spec.Combined, spec.Options); err != nil {
+			result.fail(archiveName, err.Error())
+			return
+		}
+		result.Completed++
+		return
+	}
+
+	gzip := spec.Options.GzipLevel > 0
+	path := filepath.Join(spec.OutputDir, archiveOutputName(archiveName, gzip))
+	f, err := os.Create(path)
+	if err != nil {
+		result.fail(archiveName, err.Error())
+		return
+	}
+	err = GetCollection(archivePath, f, spec.Options)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		os.Remove(path)
+		result.fail(archiveName, err.Error())
+		return
+	}
+	result.Completed++
 }
 
 func (r *FetchResult) fail(accession, msg string) {

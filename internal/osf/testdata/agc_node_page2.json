@@ -1,0 +1,22 @@
+{
+  "data": [
+    {
+      "id": "6a35f7fa93303b1ff4b0e80c",
+      "type": "files",
+      "attributes": {
+        "name": "subthreshold_remainder_global_ordered_0091.agc",
+        "kind": "file",
+        "size": 114899074,
+        "extra": { "hashes": { "md5": "eee2fcce08c28ce4ef6f0199ea69a04f" } }
+      },
+      "links": { "download": "https://osf.io/download/6a35f7fa93303b1ff4b0e80c/" }
+    }
+  ],
+  "links": {
+    "first": null,
+    "prev": "https://api.osf.io/v2/nodes/z7q5y/files/osfstorage/6a35c88e71b808fa8816675d/?page=1",
+    "next": null,
+    "last": null
+  },
+  "meta": { "version": "2.0" }
+}

@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/allthebacteria/atb-cli/internal/download"
 	"github.com/allthebacteria/atb-cli/internal/sources"
 )
 
@@ -94,6 +95,63 @@ func TestSampleFilename(t *testing.T) {
 	}
 	if got := sampleFilename("ACC1", true); got != "ACC1.fa.gz" {
 		t.Errorf("sampleFilename(gzip) = %q", got)
+	}
+}
+
+func TestBuildDownloadTasksUsesRefs(t *testing.T) {
+	archives := []string{"Acinetobacter_baylyi_global_ordered_0001", "legacy_batch"}
+	spec := FetchSpec{
+		BaseURL: "https://cesgo.example/agc/",
+		Refs: map[string]ArchiveRef{
+			"Acinetobacter_baylyi_global_ordered_0001": {
+				Name: "Acinetobacter_baylyi_global_ordered_0001",
+				URL:  "https://osf.io/download/aaa/",
+				MD5:  "md5aaa",
+			},
+		},
+	}
+
+	tasks, urlToArchive := buildDownloadTasks(archives, spec)
+	if len(tasks) != 2 {
+		t.Fatalf("got %d tasks, want 2", len(tasks))
+	}
+
+	var osfTask, legacyTask download.FileTask
+	for _, tk := range tasks {
+		switch tk.Filename {
+		case "Acinetobacter_baylyi_global_ordered_0001.agc":
+			osfTask = tk
+		case "legacy_batch.agc":
+			legacyTask = tk
+		default:
+			t.Errorf("unexpected task filename %q", tk.Filename)
+		}
+	}
+
+	// Archive present in Refs: opaque OSF URL + md5 carried through for
+	// download and verification (cannot be built from the name).
+	if osfTask.URL != "https://osf.io/download/aaa/" {
+		t.Errorf("osf task URL = %q, want the ref URL", osfTask.URL)
+	}
+	if osfTask.MD5 != "md5aaa" {
+		t.Errorf("osf task MD5 = %q, want md5aaa", osfTask.MD5)
+	}
+
+	// Archive absent from Refs: falls back to the constructed base URL, no md5.
+	if legacyTask.URL != "https://cesgo.example/agc/legacy_batch.agc" {
+		t.Errorf("legacy task URL = %q, want constructed fallback", legacyTask.URL)
+	}
+	if legacyTask.MD5 != "" {
+		t.Errorf("legacy task MD5 = %q, want empty (no ref)", legacyTask.MD5)
+	}
+
+	// The url->archive map must let a download error be attributed back to the
+	// archive name regardless of which URL form was used.
+	if urlToArchive[osfTask.URL] != "Acinetobacter_baylyi_global_ordered_0001" {
+		t.Errorf("urlToArchive[%q] = %q, want the OSF archive name", osfTask.URL, urlToArchive[osfTask.URL])
+	}
+	if urlToArchive[legacyTask.URL] != "legacy_batch" {
+		t.Errorf("urlToArchive[%q] = %q, want legacy_batch", legacyTask.URL, urlToArchive[legacyTask.URL])
 	}
 }
 
@@ -280,6 +338,130 @@ func TestFetchGenomesDownloadFailureFailsGroup(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(outDir, "ACC1.fa")); err != nil {
 		t.Errorf("ACC1.fa from the healthy group should exist: %v", err)
+	}
+}
+
+// writeFakeAGCCollection installs an `agc` stub on PATH that supports getcol:
+// `agc getcol <archive>` prints two whole-archive FASTA records. If the archive
+// path contains "FAILCOL" it exits non-zero, simulating an extraction failure.
+func writeFakeAGCCollection(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("fake agc stub requires a POSIX shell")
+	}
+	dir := t.TempDir()
+	script := "#!/bin/sh\n" +
+		"if [ \"$1\" = getcol ]; then\n" +
+		"  for a in \"$@\"; do\n" +
+		"    case \"$a\" in *FAILCOL*.agc) echo 'getcol: bad archive' 1>&2; exit 1 ;; esac\n" +
+		"  done\n" +
+		"  printf '>WHOLE1\\nACGTACGT\\n>WHOLE2\\nTTTTGGGG\\n'\n" +
+		"  exit 0\n" +
+		"fi\n" +
+		"exit 0\n"
+	if err := os.WriteFile(filepath.Join(dir, "agc"), []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake agc: %v", err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func TestFetchGenomesWholeArchiveCombine(t *testing.T) {
+	writeFakeAGCCollection(t)
+	base := t.TempDir()
+	archiveDir := filepath.Join(base, "agc")
+	seedArchive(t, archiveDir, "batch_a")
+
+	var combined strings.Builder
+	// An empty accession slice means "extract the whole batch" (Mode A by-species).
+	groups := map[string][]string{"batch_a": nil}
+	res, err := FetchGenomes(groups, FetchSpec{Combine: true, Combined: &combined, ArchiveDir: archiveDir, Parallel: 1})
+	if err != nil {
+		t.Fatalf("FetchGenomes: %v", err)
+	}
+	if res.Completed != 1 || res.Failed != 0 {
+		t.Fatalf("result = %+v, want Completed 1 Failed 0", res)
+	}
+	out := combined.String()
+	if !strings.Contains(out, ">WHOLE1") || !strings.Contains(out, ">WHOLE2") {
+		t.Errorf("combined output should hold the whole-archive records, got:\n%s", out)
+	}
+}
+
+func TestFetchGenomesWholeArchivePerBatchFile(t *testing.T) {
+	writeFakeAGCCollection(t)
+	base := t.TempDir()
+	archiveDir := filepath.Join(base, "agc")
+	seedArchive(t, archiveDir, "batch_a")
+	outDir := filepath.Join(base, "out")
+
+	groups := map[string][]string{"batch_a": nil}
+	res, err := FetchGenomes(groups, FetchSpec{OutputDir: outDir, ArchiveDir: archiveDir, Parallel: 1})
+	if err != nil {
+		t.Fatalf("FetchGenomes: %v", err)
+	}
+	if res.Completed != 1 || res.Failed != 0 {
+		t.Fatalf("result = %+v, want Completed 1 Failed 0", res)
+	}
+	// Non-combine whole-archive writes one file per batch: <archive>.fa.
+	data, err := os.ReadFile(filepath.Join(outDir, "batch_a.fa"))
+	if err != nil {
+		t.Fatalf("read batch_a.fa: %v", err)
+	}
+	if !strings.Contains(string(data), ">WHOLE1") {
+		t.Errorf("batch_a.fa missing whole-archive records: %q", data)
+	}
+}
+
+func TestFetchGenomesWholeArchiveExtractFailure(t *testing.T) {
+	writeFakeAGCCollection(t)
+	base := t.TempDir()
+	archiveDir := filepath.Join(base, "agc")
+	seedArchive(t, archiveDir, "FAILCOL_batch")
+	outDir := filepath.Join(base, "out")
+
+	groups := map[string][]string{"FAILCOL_batch": nil}
+	res, err := FetchGenomes(groups, FetchSpec{OutputDir: outDir, ArchiveDir: archiveDir, Parallel: 1})
+	if err != nil {
+		t.Fatalf("FetchGenomes: %v", err)
+	}
+	if res.Completed != 0 || res.Failed != 1 {
+		t.Fatalf("result = %+v, want Completed 0 Failed 1", res)
+	}
+	// Failure is attributed to the batch, and no partial file is left behind.
+	if len(res.Errors) != 1 || res.Errors[0].Accession != "FAILCOL_batch" {
+		t.Errorf("expected one failure keyed by the batch name, got %v", res.Errors)
+	}
+	if _, err := os.Stat(filepath.Join(outDir, "FAILCOL_batch.fa")); !os.IsNotExist(err) {
+		t.Errorf("partial batch file should be removed on failure")
+	}
+}
+
+func TestFetchGenomesWholeArchiveDownloadFailure(t *testing.T) {
+	writeFakeAGCCollection(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r) // the batch download 404s
+	}))
+	defer srv.Close()
+
+	base := t.TempDir()
+	archiveDir := filepath.Join(base, "agc") // empty: nothing cached, so a download is attempted
+	outDir := filepath.Join(base, "out")
+
+	// A download failure for a whole-archive group (empty accs) must still be
+	// counted and attributed to the batch, not silently dropped.
+	groups := map[string][]string{"missing_batch": nil}
+	res, err := FetchGenomes(groups, FetchSpec{OutputDir: outDir, ArchiveDir: archiveDir, BaseURL: srv.URL + "/", Parallel: 1})
+	if err != nil {
+		t.Fatalf("FetchGenomes: %v", err)
+	}
+	if res.Completed != 0 || res.Failed != 1 {
+		t.Fatalf("result = %+v, want Completed 0 Failed 1", res)
+	}
+	if len(res.Errors) != 1 || res.Errors[0].Accession != "missing_batch" {
+		t.Errorf("download failure should be attributed to the batch name, got %v", res.Errors)
+	}
+	if !strings.HasPrefix(res.Errors[0].Error, "download missing_batch.agc:") {
+		t.Errorf("error = %q, want a 'download missing_batch.agc:' prefix", res.Errors[0].Error)
 	}
 }
 

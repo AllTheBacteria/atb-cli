@@ -23,6 +23,7 @@ Uses the upstream 'agc' binary. Run 'atb agc install' to download it
 (Linux/macOS x64+arm64, Windows x64).`,
 	}
 	cmd.AddCommand(newAGCInstallCmd())
+	cmd.AddCommand(newAGCIndexCmd())
 	cmd.AddCommand(newAGCListCmd())
 	cmd.AddCommand(newAGCInfoCmd())
 	cmd.AddCommand(newAGCGetCmd())
