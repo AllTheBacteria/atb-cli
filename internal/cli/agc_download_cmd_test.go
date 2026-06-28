@@ -23,15 +23,24 @@ func seedArchiveMap(t *testing.T, dataDir, body string) {
 	}
 }
 
-func TestFetchGenomesHelpListsFlags(t *testing.T) {
-	stdout, _, err := runCmd("fetch-genomes", "--help")
+func TestAGCDownloadHelpListsFlags(t *testing.T) {
+	stdout, _, err := runCmd("agc", "download", "--help")
 	if err != nil {
-		t.Fatalf("fetch-genomes --help: %v", err)
+		t.Fatalf("agc download --help: %v", err)
 	}
 	for _, want := range []string{"--from", "--combine", "--archive-dir", "--dry-run", "--species", "--agc-index"} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("expected %q in --help, got:\n%s", want, stdout)
 		}
+	}
+}
+
+// TestTopLevelFetchGenomesRemoved guards the rename: the command moved under the
+// agc group, so the old top-level path must no longer resolve.
+func TestTopLevelFetchGenomesRemoved(t *testing.T) {
+	_, _, err := runCmd("fetch-genomes", "--help")
+	if err == nil {
+		t.Fatal("expected top-level 'fetch-genomes' to be gone after the move to 'agc download'")
 	}
 }
 
@@ -52,7 +61,7 @@ func writeAGCIndex(t *testing.T) string {
 	return path
 }
 
-func TestFetchGenomesSpeciesDryRun(t *testing.T) {
+func TestAGCDownloadSpeciesDryRun(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake agc stub requires a POSIX shell")
 	}
@@ -60,7 +69,7 @@ func TestFetchGenomesSpeciesDryRun(t *testing.T) {
 	withFakeAGC(t, "#!/bin/sh\nexit 0\n")
 	idxPath := writeAGCIndex(t)
 
-	stdout, stderr, err := runCmd("fetch-genomes", "--data-dir", dir,
+	stdout, stderr, err := runCmd("agc", "download", "--data-dir", dir,
 		"--species", "Acinetobacter baylyi", "--agc-index", idxPath, "--dry-run")
 	if err != nil {
 		t.Fatalf("species dry-run failed: %v\nstderr: %s", err, stderr)
@@ -91,7 +100,7 @@ func TestFetchGenomesSpeciesDryRun(t *testing.T) {
 	}
 }
 
-func TestFetchGenomesSpeciesNoMatch(t *testing.T) {
+func TestAGCDownloadSpeciesNoMatch(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake agc stub requires a POSIX shell")
 	}
@@ -99,7 +108,7 @@ func TestFetchGenomesSpeciesNoMatch(t *testing.T) {
 	withFakeAGC(t, "#!/bin/sh\nexit 0\n")
 	idxPath := writeAGCIndex(t)
 
-	_, stderr, err := runCmd("fetch-genomes", "--data-dir", dir,
+	_, stderr, err := runCmd("agc", "download", "--data-dir", dir,
 		"--species", "Escherichia coli", "--agc-index", idxPath, "--dry-run")
 	if err == nil {
 		t.Fatal("expected an error when no batch matches the species")
@@ -110,7 +119,7 @@ func TestFetchGenomesSpeciesNoMatch(t *testing.T) {
 	}
 }
 
-func TestFetchGenomesSpeciesRejectsAccessions(t *testing.T) {
+func TestAGCDownloadSpeciesRejectsAccessions(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake agc stub requires a POSIX shell")
 	}
@@ -119,7 +128,7 @@ func TestFetchGenomesSpeciesRejectsAccessions(t *testing.T) {
 	idxPath := writeAGCIndex(t)
 
 	// --species is its own access mode; mixing it with accessions is ambiguous.
-	_, _, err := runCmd("fetch-genomes", "--data-dir", dir,
+	_, _, err := runCmd("agc", "download", "--data-dir", dir,
 		"--species", "Acinetobacter baylyi", "--agc-index", idxPath, "SAMD00000344")
 	if err == nil {
 		t.Fatal("expected an error when --species is combined with accession arguments")
@@ -129,7 +138,7 @@ func TestFetchGenomesSpeciesRejectsAccessions(t *testing.T) {
 	}
 }
 
-func TestFetchGenomesDryRun(t *testing.T) {
+func TestAGCDownloadDryRun(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake agc stub requires a POSIX shell")
 	}
@@ -138,7 +147,7 @@ func TestFetchGenomesDryRun(t *testing.T) {
 	withFakeAGC(t, "#!/bin/sh\nexit 0\n")
 	seedArchiveMap(t, dir, "ACC1 batch_a\nACC2 batch_a\n")
 
-	stdout, stderr, err := runCmd("fetch-genomes", "--data-dir", dir, "--dry-run", "ACC1", "ACC2")
+	stdout, stderr, err := runCmd("agc", "download", "--data-dir", dir, "--dry-run", "ACC1", "ACC2")
 	if err != nil {
 		t.Fatalf("dry-run failed: %v\nstderr: %s", err, stderr)
 	}
@@ -155,7 +164,7 @@ func TestFetchGenomesDryRun(t *testing.T) {
 	}
 }
 
-func TestFetchGenomesUnresolvedWarns(t *testing.T) {
+func TestAGCDownloadUnresolvedWarns(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake agc stub requires a POSIX shell")
 	}
@@ -163,7 +172,7 @@ func TestFetchGenomesUnresolvedWarns(t *testing.T) {
 	withFakeAGC(t, "#!/bin/sh\nexit 0\n")
 	seedArchiveMap(t, dir, "ACC1 batch_a\n")
 
-	_, stderr, err := runCmd("fetch-genomes", "--data-dir", dir, "--dry-run", "ACC1", "GHOST")
+	_, stderr, err := runCmd("agc", "download", "--data-dir", dir, "--dry-run", "ACC1", "GHOST")
 	if err == nil {
 		t.Fatal("expected non-zero exit when an accession is unresolved")
 	}
@@ -172,14 +181,14 @@ func TestFetchGenomesUnresolvedWarns(t *testing.T) {
 	}
 }
 
-func TestFetchGenomesMissingBinary(t *testing.T) {
+func TestAGCDownloadMissingBinary(t *testing.T) {
 	dir := t.TempDir()
 	seedArchiveMap(t, dir, "ACC1 batch_a\n")
 	// Empty PATH so FindBinary cannot locate agc, and the test binary's own
 	// directory has no agc either.
 	t.Setenv("PATH", t.TempDir())
 
-	_, _, err := runCmd("fetch-genomes", "--data-dir", dir, "ACC1")
+	_, _, err := runCmd("agc", "download", "--data-dir", dir, "ACC1")
 	if err == nil {
 		t.Fatal("expected error when agc is not installed")
 	}
@@ -188,7 +197,7 @@ func TestFetchGenomesMissingBinary(t *testing.T) {
 	}
 }
 
-func TestFetchGenomesDryRunMultipleArchives(t *testing.T) {
+func TestAGCDownloadDryRunMultipleArchives(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake agc stub requires a POSIX shell")
 	}
@@ -196,7 +205,7 @@ func TestFetchGenomesDryRunMultipleArchives(t *testing.T) {
 	withFakeAGC(t, "#!/bin/sh\nexit 0\n")
 	seedArchiveMap(t, dir, "ACC1 batch_a\nACC2 batch_b\nACC3 batch_a\n")
 
-	stdout, stderr, err := runCmd("fetch-genomes", "--data-dir", dir, "--dry-run", "ACC1", "ACC2", "ACC3")
+	stdout, stderr, err := runCmd("agc", "download", "--data-dir", dir, "--dry-run", "ACC1", "ACC2", "ACC3")
 	if err != nil {
 		t.Fatalf("dry-run failed: %v\nstderr: %s", err, stderr)
 	}
@@ -217,7 +226,7 @@ func TestFetchGenomesDryRunMultipleArchives(t *testing.T) {
 	}
 }
 
-func TestFetchGenomesDedupesArgsAndFile(t *testing.T) {
+func TestAGCDownloadDedupesArgsAndFile(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake agc stub requires a POSIX shell")
 	}
@@ -231,7 +240,7 @@ func TestFetchGenomesDedupesArgsAndFile(t *testing.T) {
 	}
 	// args [ACC1 ACC2] + --from [ACC2 ACC3]: ACC2 is duplicated and must
 	// collapse to one sample; ACC3 is unresolved and must warn + exit non-zero.
-	_, stderr, err := runCmd("fetch-genomes", "--data-dir", dir, "--dry-run", "ACC1", "ACC2", "--from", from)
+	_, stderr, err := runCmd("agc", "download", "--data-dir", dir, "--dry-run", "ACC1", "ACC2", "--from", from)
 	if err == nil {
 		t.Fatal("expected non-zero exit for unresolved ACC3")
 	}

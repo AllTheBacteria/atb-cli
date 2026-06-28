@@ -12,16 +12,21 @@ import (
 func newAGCCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "agc",
-		Short: "Low-level tools for local AGC archive files",
-		Long: `Low-level tools for AGC (Assembled Genomes Compressor) archives you
-already have on disk: list samples and contigs, and extract sequences as FASTA.
+		Short: "Download and inspect genomes in AGC archives",
+		Long: `Work with AllTheBacteria genomes distributed as AGC (Assembled Genomes
+Compressor) archives.
 
-To fetch ATB genomes by sample accession (download the right archive and extract
-for you), use 'atb fetch-genomes' instead — that is the command most users want.
+Most users want 'atb agc download': it finds the right archive(s) for an accession
+or species, downloads them (cache-first, MD5-verified), and extracts FASTA.
+
+The other subcommands are lower-level: 'ls', 'info', and 'get' operate on .agc
+files you already have on disk; 'install' fetches the upstream agc binary and
+'index' builds the by-species index that 'download --species' searches.
 
 Uses the upstream 'agc' binary. Run 'atb agc install' to download it
 (Linux/macOS x64+arm64, Windows x64).`,
 	}
+	cmd.AddCommand(newAGCDownloadCmd())
 	cmd.AddCommand(newAGCInstallCmd())
 	cmd.AddCommand(newAGCIndexCmd())
 	cmd.AddCommand(newAGCListCmd())

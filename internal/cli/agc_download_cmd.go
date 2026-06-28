@@ -11,7 +11,7 @@ import (
 	"github.com/allthebacteria/atb-cli/internal/sources"
 )
 
-func newFetchGenomesCmd() *cobra.Command {
+func newAGCDownloadCmd() *cobra.Command {
 	var (
 		fromFile   string
 		outputDir  string
@@ -30,10 +30,9 @@ func newFetchGenomesCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:     "fetch-genomes [accession...]",
-		Aliases: []string{"genomes"},
-		Short:   "Fetch genome FASTA for ATB accessions from AGC archives",
-		Long: `Fetch assembled-genome FASTA from AGC archives, two ways.
+		Use:   "download [accession...]",
+		Short: "Download genome FASTA from AGC archives by accession or species",
+		Long: `Download assembled-genome FASTA from AGC archives, two ways.
 
 By accession (the default): accessions resolve to AGC archives via a cached
 sample->archive map; the needed .agc archives are downloaded (cache-first) to
@@ -52,20 +51,20 @@ Run 'atb agc install' once to install the agc binary. By default each sample is
 written to <output-dir>/<accession>.fa; use --combine to stream everything to one
 file (or stdout).`,
 		Example: `  # One sample to the default output directory
-  atb fetch-genomes SAMD00000344
+  atb agc download SAMD00000344
 
   # Every Acinetobacter baylyi batch, combined into one FASTA
-  atb fetch-genomes --species "Acinetobacter baylyi" --combine -o baylyi.fa
+  atb agc download --species "Acinetobacter baylyi" --combine -o baylyi.fa
 
   # Pipe a query straight into retrieval
   atb query --species "Escherichia coli" --hq-only --limit 5 --format tsv | \
-    atb fetch-genomes --from - -o ./ecoli
+    atb agc download --from - -o ./ecoli
 
   # Combine many samples into one gzipped FASTA
-  atb fetch-genomes --from accessions.txt --combine --gzip 6 -o all.fa.gz
+  atb agc download --from accessions.txt --combine --gzip 6 -o all.fa.gz
 
   # Preview which archives would be downloaded
-  atb fetch-genomes --from accessions.txt --dry-run`,
+  atb agc download --from accessions.txt --dry-run`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			errOut := cmd.ErrOrStderr()
 			cfg, err := loadConfig()

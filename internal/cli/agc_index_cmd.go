@@ -39,9 +39,9 @@ func newAGCIndexCmd() *cobra.Command {
 		Short: "Crawl the OSF node's AGC batches into a searchable TSV index",
 		Long: `Crawl an OSF node's agc_batches/ folder and write a separate AGC index
 (atb_agc_files.tsv): one row per .agc batch with its species, OSF download URL,
-md5, and size. This is the index that 'atb fetch-genomes --species' searches to
+md5, and size. This is the index that 'atb agc download --species' searches to
 decide which batches to download — generate it once and commit it for offline use
-(pass it back via --agc-index), or let fetch-genomes crawl and cache it on demand.
+(pass it back via --agc-index), or let 'atb agc download' crawl and cache it on demand.
 
 The index is a 6-column TSV (project, project_id, filename, url, md5, size_mb) —
 the same layout as the master OSF index, so the existing parser round-trips it.`,
