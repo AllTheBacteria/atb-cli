@@ -8,6 +8,12 @@
   ("ATB testing", 38.5 GB, uploaded 2026-06-20). This is the OSF migration the
   branch's `sources.go` flagged as "still under discussion".
 
+> **Update (2026-06-28):** The CLI command discussed here as `atb fetch-genomes`
+> has since moved to **`atb agc download`** (see
+> [`agc-download-command.md`](agc-download-command.md)). This ADR is preserved as
+> the original point-in-time record; the command and file names below describe the
+> pre-rename CLI.
+
 ---
 
 ## 1. Context

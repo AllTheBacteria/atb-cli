@@ -24,7 +24,7 @@ Single binary, no dependencies.
   - [Query AMR genes](#query-amr-genes)
   - [Query MLST](#query-mlst-multi-locus-sequence-typing)
   - [Find closest genomes (sketch)](#find-closest-genomes-sketch)
-  - [Get genomes by accession (`atb fetch-genomes`)](#get-genomes-by-accession-atb-fetch-genomes)
+  - [Get genomes from AGC archives (`atb agc download`)](#get-genomes-from-agc-archives-atb-agc-download)
   - [Browse and download ATB files from OSF](#browse-and-download-atb-files-from-osf)
   - [Fetch the database](#fetch-the-database)
   - [Configuration](#configuration)
@@ -489,9 +489,9 @@ When `--download` is used, the output directory will contain:
 atb sketch info
 ```
 
-### Get genomes by accession (`atb fetch-genomes`)
+### Get genomes from AGC archives (`atb agc download`)
 
-`atb fetch-genomes` retrieves assembled-genome FASTA for ATB sample accessions
+`atb agc download` retrieves assembled-genome FASTA for ATB sample accessions
 stored in [AGC](https://github.com/refresh-bio/agc) archives. It resolves each
 accession to its archive via a cached sample-to-archive map, downloads the
 needed `.agc` archives (cache-first, into `<data-dir>/agc`), and extracts each
@@ -502,17 +502,17 @@ Run `atb agc install` once to install the `agc` helper binary.
 
 ```bash
 # One sample to the default output directory
-atb fetch-genomes SAMD00000344
+atb agc download SAMD00000344
 
 # Pipe a query straight into retrieval (one file per sample)
 atb query --species "Escherichia coli" --hq-only --limit 5 --format tsv | \
-  atb fetch-genomes --from - --output-dir ./ecoli
+  atb agc download --from - --output-dir ./ecoli
 
 # A list of accessions, combined into one gzipped FASTA
-atb fetch-genomes --from accessions.txt --combine --gzip 6 -o all.fa.gz
+atb agc download --from accessions.txt --combine --gzip 6 -o all.fa.gz
 
 # Preview which archives would be downloaded (no download)
-atb fetch-genomes --from accessions.txt --dry-run
+atb agc download --from accessions.txt --dry-run
 ```
 
 By default each sample is written to `<output-dir>/<accession>.fa` (output-dir
@@ -562,10 +562,10 @@ atb agc get genomes.agc --all --gzip 6 -t 8 -o all.fa.gz
 queries (`contig[@sample][:from-to]`), `--sample` (whole samples), or `--all`
 (the whole collection). Output streams to stdout unless `-o` is given.
 
-> Most users want [`atb fetch-genomes`](#get-genomes-by-accession-atb-fetch-genomes)
-> instead, which finds and downloads the right archive for an accession. `atb agc`
-> is the low-level escape hatch for `.agc` files you already have on disk. It is
-> read-only — it never creates or modifies archives.
+> Most users want [`atb agc download`](#get-genomes-from-agc-archives-atb-agc-download)
+> instead, which finds and downloads the right archive for an accession. The other
+> `atb agc` subcommands (`ls`/`info`/`get`) are the low-level escape hatch for `.agc`
+> files you already have on disk — read-only; they never create or modify archives.
 
 ### Browse and download ATB files from OSF
 

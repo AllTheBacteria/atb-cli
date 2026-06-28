@@ -5,6 +5,12 @@
 - **Branch:** `feat/agc-osf-test` (off `feat/agc-reader`) — **do not merge to main**
 - **Builds on:** `docs/design/agc-osf-migration.md` (the OSF-migration ADR)
 
+> **Update (2026-06-28):** The `atb fetch-genomes` command this spec implements has
+> since moved to **`atb agc download`** (see
+> [`agc-download-command.md`](agc-download-command.md)). This spec is preserved as
+> the original point-in-time record; the command and file names below describe the
+> pre-rename CLI.
+
 ## Goal
 
 Make `atb fetch-genomes` work **today** against the AGC test archives staged on
