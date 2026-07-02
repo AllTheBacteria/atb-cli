@@ -188,6 +188,58 @@ func CrawlAGCIndex(rootURL, nodeID string) (*Index, error) {
 	return CrawlAGCNode(client, folderURL, nodeID)
 }
 
+// FetchAGCIndexFromURL returns the AGC batch index by downloading a pre-built
+// TSV from url, mirroring FetchIndex: a cached copy under
+// <cacheDir>/atb_agc_files.tsv is reused while younger than CacheMaxAge,
+// otherwise the file is downloaded and written atomically before parsing. This
+// is the hosted counterpart to FetchAGCIndex's live crawl — once the index has
+// been published as a single OSF file (sources.AGCIndexURL) there is no need to
+// walk the node's agc_batches/ folder page by page. Set force=true to bypass a
+// fresh cache.
+func FetchAGCIndexFromURL(cacheDir, url string, force bool) (*Index, error) {
+	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+		return nil, fmt.Errorf("create cache dir: %w", err)
+	}
+	cached := filepath.Join(cacheDir, sources.AGCIndexFilename)
+
+	if !force {
+		if info, err := os.Stat(cached); err == nil && time.Since(info.ModTime()) < CacheMaxAge {
+			f, err := os.Open(cached)
+			if err != nil {
+				return nil, fmt.Errorf("open cached AGC index: %w", err)
+			}
+			defer f.Close()
+			return ParseIndex(f)
+		}
+	}
+
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("fetch AGC index: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("fetch AGC index: HTTP %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read AGC index body: %w", err)
+	}
+
+	tmp := cached + ".tmp"
+	if err := os.WriteFile(tmp, body, 0644); err != nil {
+		return nil, fmt.Errorf("write AGC index: %w", err)
+	}
+	if err := os.Rename(tmp, cached); err != nil {
+		os.Remove(tmp)
+		return nil, fmt.Errorf("rename AGC index: %w", err)
+	}
+
+	return ParseIndex(strings.NewReader(string(body)))
+}
+
 // FetchAGCIndex returns the AGC batch index for an OSF node, mirroring
 // FetchIndex: a cached TSV is reused while younger than CacheMaxAge, otherwise
 // the node's agc_batches/ folder is crawled and the result written atomically

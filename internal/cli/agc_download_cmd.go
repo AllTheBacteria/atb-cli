@@ -150,7 +150,7 @@ file (or stdout).`,
 					return fmt.Errorf("--species fetches whole batches by species and cannot be combined with accession arguments or --from")
 				}
 				node := resolveOSFNode(osfNode, cfg.AGC.OSFNode)
-				idx, err := loadAGCIndex(agcIndex, archiveDirResolved, node, refresh)
+				idx, err := loadAGCIndex(agcIndex, sources.AGCIndexURL, archiveDirResolved, node, refresh)
 				if err != nil {
 					return err
 				}
@@ -243,12 +243,22 @@ file (or stdout).`,
 	return cmd
 }
 
+// useHostedAGCIndex reports whether the by-species index should be downloaded
+// from the published OSF file rather than crawled live: only when there is no
+// local --agc-index override, a hosted URL is configured, and the node is the
+// default. An explicit --osf-node override targets a specific node, so it must
+// crawl that node instead of reusing the default node's published snapshot.
+func useHostedAGCIndex(localPath, indexURL, node string) bool {
+	return localPath == "" && indexURL != "" && node == sources.AGCTestNodeID
+}
+
 // loadAGCIndex returns the by-species AGC index for Mode A. A non-empty
 // localPath is read and parsed directly (the committed atb_agc_files.tsv, or any
-// offline copy); otherwise the OSF node's agc_batches/ folder is crawled and the
-// result cached under cacheDir as atb_agc_files.tsv (refresh bypasses a fresh
-// cache).
-func loadAGCIndex(localPath, cacheDir, node string, refresh bool) (*osf.Index, error) {
+// offline copy). Otherwise, when a hosted index URL is configured for the default
+// node, the published TSV is downloaded (like the master index); failing that,
+// the OSF node's agc_batches/ folder is crawled. Both network paths cache under
+// cacheDir as atb_agc_files.tsv (refresh bypasses a fresh cache).
+func loadAGCIndex(localPath, indexURL, cacheDir, node string, refresh bool) (*osf.Index, error) {
 	if localPath != "" {
 		f, err := os.Open(localPath)
 		if err != nil {
@@ -256,6 +266,9 @@ func loadAGCIndex(localPath, cacheDir, node string, refresh bool) (*osf.Index, e
 		}
 		defer f.Close()
 		return osf.ParseIndex(f)
+	}
+	if useHostedAGCIndex(localPath, indexURL, node) {
+		return osf.FetchAGCIndexFromURL(cacheDir, indexURL, refresh)
 	}
 	return osf.FetchAGCIndex(cacheDir, sources.OSFNodeFilesURL(node), node, refresh)
 }

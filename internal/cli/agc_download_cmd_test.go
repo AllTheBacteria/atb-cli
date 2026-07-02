@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -59,6 +61,68 @@ func writeAGCIndex(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return path
+}
+
+// TestUseHostedAGCIndex locks the source-selection gate: a hosted index is used
+// only when there is no local override, a URL is configured, and the node is the
+// default. An explicit --osf-node override must still route to a live crawl.
+func TestUseHostedAGCIndex(t *testing.T) {
+	const url = "https://osf.io/download/xyz/"
+	cases := []struct {
+		name      string
+		localPath string
+		indexURL  string
+		node      string
+		want      bool
+	}{
+		{"hosted, default node", "", url, sources.AGCTestNodeID, true},
+		{"local path wins", "/tmp/x.tsv", url, sources.AGCTestNodeID, false},
+		{"no hosted url configured", "", "", sources.AGCTestNodeID, false},
+		{"overridden node crawls", "", url, "othernode", false},
+	}
+	for _, tc := range cases {
+		if got := useHostedAGCIndex(tc.localPath, tc.indexURL, tc.node); got != tc.want {
+			t.Errorf("%s: useHostedAGCIndex(%q,%q,%q) = %v, want %v",
+				tc.name, tc.localPath, tc.indexURL, tc.node, got, tc.want)
+		}
+	}
+}
+
+// TestLoadAGCIndexPrefersHostedURL verifies the wiring: with a hosted URL and the
+// default node, loadAGCIndex downloads the published TSV; a local --agc-index
+// path still wins over it.
+func TestLoadAGCIndexPrefersHostedURL(t *testing.T) {
+	var hits int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		w.Write([]byte(agcIndexTSV))
+	}))
+	defer server.Close()
+
+	dir := t.TempDir()
+	idx, err := loadAGCIndex("", server.URL, dir, sources.AGCTestNodeID, false)
+	if err != nil {
+		t.Fatalf("loadAGCIndex (hosted): %v", err)
+	}
+	if len(idx.Entries) != 3 {
+		t.Fatalf("hosted: got %d entries, want 3", len(idx.Entries))
+	}
+	if hits != 1 {
+		t.Errorf("hosted: expected 1 download, got %d server hits", hits)
+	}
+
+	local := writeAGCIndex(t)
+	hitsBefore := hits
+	idx2, err := loadAGCIndex(local, server.URL, dir, sources.AGCTestNodeID, false)
+	if err != nil {
+		t.Fatalf("loadAGCIndex (local): %v", err)
+	}
+	if len(idx2.Entries) != 3 {
+		t.Fatalf("local: got %d entries, want 3", len(idx2.Entries))
+	}
+	if hits != hitsBefore {
+		t.Errorf("local path made %d extra download(s), want 0", hits-hitsBefore)
+	}
 }
 
 func TestAGCDownloadSpeciesDryRun(t *testing.T) {

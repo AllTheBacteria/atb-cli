@@ -153,9 +153,16 @@ const AGCTestNodeID = "z7q5y"
 // AGCBatchesFolder is the folder on the node holding the .agc batch files.
 const AGCBatchesFolder = "agc_batches"
 
-// AGCIndexFilename is the local cache filename for the crawled AGC index TSV,
-// stored in <data-dir>/agc/ alongside the cached archives.
+// AGCIndexFilename is the local cache filename for the AGC index TSV, stored in
+// <data-dir>/agc/ alongside the cached archives.
 const AGCIndexFilename = "atb_agc_files.tsv"
+
+// AGCIndexURL is the OSF /download/<guid>/ URL of the published AGC index TSV.
+// When set, atb downloads this single file (like the master IndexURL) instead of
+// crawling the node's agc_batches/ folder page by page. Empty means "not yet
+// published" — atb falls back to the live crawl, so this is the one line to
+// update once the index is hosted on OSF.
+const AGCIndexURL = ""
 
 // OSFNodeFilesURL returns the osfstorage root listing URL for an OSF node, the
 // entry point for crawling its folders.

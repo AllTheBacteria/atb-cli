@@ -227,6 +227,66 @@ func TestFetchAGCIndexCacheFirst(t *testing.T) {
 	}
 }
 
+func TestFetchAGCIndexFromURL(t *testing.T) {
+	const tsv = "project\tproject_id\tfilename\turl\tmd5\tsize_mb\n" +
+		"Acinetobacter_baylyi\tz7q5y\tAcinetobacter_baylyi_global_ordered_0001.agc\thttps://osf.io/download/aaa/\t7be632ec46828a45a4d6d01d77b8099d\t3.890981\n" +
+		"Salmonella_enterica\tz7q5y\tSalmonella_enterica_global_ordered_0072.agc\thttps://osf.io/download/bbb/\t1650ac20b0da23db315b0c31dc04b8a1\t34.606133\n"
+
+	var hits int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		if r.URL.Path != "/idx" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/tab-separated-values")
+		w.Write([]byte(tsv))
+	}))
+	defer server.Close()
+
+	dir := t.TempDir()
+	url := server.URL + "/idx"
+
+	// Cold cache: download the hosted TSV, parse it, and write the cache file.
+	idx, err := FetchAGCIndexFromURL(dir, url, false)
+	if err != nil {
+		t.Fatalf("FetchAGCIndexFromURL (cold): %v", err)
+	}
+	if len(idx.Entries) != 2 {
+		t.Fatalf("cold cache: got %d entries, want 2", len(idx.Entries))
+	}
+	if idx.Entries[0].URL != "https://osf.io/download/aaa/" {
+		t.Errorf("entry URL = %q, want the per-archive OSF download URL", idx.Entries[0].URL)
+	}
+	if hits != 1 {
+		t.Fatalf("cold cache: %d server hits, want 1", hits)
+	}
+	cacheFile := filepath.Join(dir, sources.AGCIndexFilename)
+	if _, err := os.Stat(cacheFile); err != nil {
+		t.Fatalf("cold cache: index TSV not written to %s: %v", cacheFile, err)
+	}
+
+	// Warm cache: fresh file on disk, so no further download.
+	idx2, err := FetchAGCIndexFromURL(dir, url, false)
+	if err != nil {
+		t.Fatalf("FetchAGCIndexFromURL (warm): %v", err)
+	}
+	if len(idx2.Entries) != 2 {
+		t.Fatalf("warm cache: got %d entries, want 2", len(idx2.Entries))
+	}
+	if hits != 1 {
+		t.Errorf("warm cache made %d extra download(s), want 0", hits-1)
+	}
+
+	// force=true must bypass the warm cache and re-download.
+	if _, err := FetchAGCIndexFromURL(dir, url, true); err != nil {
+		t.Fatalf("FetchAGCIndexFromURL (force): %v", err)
+	}
+	if hits != 2 {
+		t.Errorf("force refresh: %d total hits, want 2", hits)
+	}
+}
+
 func TestWriteAGCIndexTSVRoundTrip(t *testing.T) {
 	idx := &Index{Entries: []Entry{
 		{Project: "Acinetobacter_baylyi", ProjectID: "z7q5y",
