@@ -34,3 +34,6 @@ changelog:
       - "^docs:"
       - "^test:"
       - "^chore:"
+
+release:
+  prerelease: auto
