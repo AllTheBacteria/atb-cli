@@ -31,7 +31,7 @@ const IndexFilename = "all_atb_files.tsv"
 // TableURLs maps parquet table filenames to their OSF download URLs.
 var TableURLs = map[string]string{
 	// Core tables (downloaded by default with `atb fetch`)
-	"assembly.parquet":       "https://osf.io/download/4ku2n/",       // sample-to-assembly mapping, species calls, quality flags
+	"assembly.parquet":       "https://osf.io/download/4ku2n/",                    // sample-to-assembly mapping, species calls, quality flags
 	"assembly_stats.parquet": "https://osf.io/download/69c51e86801fecc5d6146396/", // N50, total length, contig counts
 	"checkm2.parquet":        "https://osf.io/download/69c51e93cba7111bb21d27f2/", // completeness, contamination, genome size
 	"sylph.parquet":          "https://osf.io/download/69c51f90cba7111bb21d2905/", // species-level profiling results
@@ -91,6 +91,84 @@ const SketchlibVersion = "v0.2.4"
 
 // SketchlibRepo is the GitHub repository for sketchlib releases.
 const SketchlibRepo = "bacpop/sketchlib.rust"
+
+// ---------------------------------------------------------------------------
+// agc binary (Assembled Genomes Compressor)
+// ---------------------------------------------------------------------------
+
+// AGCVersion is the pinned release tag of the agc binary. agc 3.x reads v1/v2/v3
+// archives, so this single pin covers every .agc file in existence today.
+const AGCVersion = "v3.2.3"
+
+// AGCRepo is the GitHub repository for agc releases.
+const AGCRepo = "refresh-bio/agc"
+
+// ---------------------------------------------------------------------------
+// AGC genome archives (PROVISIONAL)
+// ---------------------------------------------------------------------------
+// AllTheBacteria is moving its genome batches from miniphy .tar.xz to AGC
+// archives. The host below is the prototype's CESGO endpoint; OSF is still
+// under discussion. These are intentionally isolated here so switching hosts
+// (or to OSF's per-file /download/<id>/ shape) is a one-line change.
+// Reference prototype: https://github.com/tam-km-truong/atb_agc_extract
+// Override at runtime via config keys agc.archive_map_url / agc.archive_base_url.
+
+// AGCArchiveMapURL is the whitespace-delimited sample->archive map (~90 MB):
+// column 1 is the sample accession, column 2 is the archive name (no .agc).
+const AGCArchiveMapURL = "https://data-access.cesgo.org/index.php/s/9WuPWJL25cYYZml/download"
+
+// AGCArchiveMapFilename is the local cache filename for the archive map.
+const AGCArchiveMapFilename = "agc_file_list.txt"
+
+// AGCArchiveBaseURL is the prefix for downloading a single .agc archive;
+// ArchiveURL appends "<archive>.agc".
+const AGCArchiveBaseURL = "https://data-access.cesgo.org/index.php/s/w8ylLnVjCokP0B5/download?path=%2F&files="
+
+// AGCArchiveSubdir is the <data-dir> subdirectory holding cached archives and
+// the archive map. Mirrors SketchSubdir.
+const AGCArchiveSubdir = "agc"
+
+// ArchiveURL returns the download URL for the named archive (without ".agc").
+func ArchiveURL(archive string) string {
+	return AGCArchiveBaseURL + archive + ".agc"
+}
+
+// ---------------------------------------------------------------------------
+// AGC genome archives over OSF (TEST DATA — node z7q5y)
+// ---------------------------------------------------------------------------
+// The AGC batches are staged on the OSF "ATB testing" node z7q5y under the
+// agc_batches/ folder. Unlike the master index, these batches are NOT
+// registered in all_atb_files.tsv. While the data is under test, atb builds a
+// SEPARATE index TSV by crawling the OSF API — each batch carries its own
+// opaque /download/<guid>/ URL, md5, and size. Keeping this isolated from the
+// master index lets the test data be promoted (or discarded) without touching
+// production paths. See docs/design/agc-osf-test-implementation.md.
+
+// OSFAPIBase is the root of the OSF REST API (v2).
+const OSFAPIBase = "https://api.osf.io/v2"
+
+// AGCTestNodeID is the OSF node hosting the AGC test batches ("ATB testing").
+const AGCTestNodeID = "z7q5y"
+
+// AGCBatchesFolder is the folder on the node holding the .agc batch files.
+const AGCBatchesFolder = "agc_batches"
+
+// AGCIndexFilename is the local cache filename for the AGC index TSV, stored in
+// <data-dir>/agc/ alongside the cached archives.
+const AGCIndexFilename = "atb_agc_files.tsv"
+
+// AGCIndexURL is the OSF /download/<guid>/ URL of the published AGC index TSV,
+// hosted on the main ATB node h7wzy alongside the master index. atb downloads this
+// single file (like the master IndexURL) instead of crawling the z7q5y
+// agc_batches/ folder page by page. Set it back to "" to fall back to the live
+// crawl (see useHostedAGCIndex). The batch rows inside still point at z7q5y.
+const AGCIndexURL = "https://osf.io/download/6a477a94899134067adf99c9/"
+
+// OSFNodeFilesURL returns the osfstorage root listing URL for an OSF node, the
+// entry point for crawling its folders.
+func OSFNodeFilesURL(nodeID string) string {
+	return OSFAPIBase + "/nodes/" + nodeID + "/files/osfstorage/"
+}
 
 // ---------------------------------------------------------------------------
 // Genome assemblies

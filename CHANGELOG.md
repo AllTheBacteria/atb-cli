@@ -2,6 +2,18 @@
 
 All notable changes to `atb-cli` are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added
+
+- `atb agc` reads AGC (Assembled Genomes Compressor) archives. `atb agc install`
+  fetches the upstream `agc` binary (Linux/macOS x64+arm64, Windows x64);
+  `atb agc ls` lists samples or a sample's contigs; `atb agc info` prints
+  archive metadata; and `atb agc get` extracts FASTA by contig
+  (`contig[@sample][:from-to]`), by `--sample`, or the whole collection with
+  `--all`. Output streams to stdout or a file (`-o`), with optional gzip
+  (`--gzip`) and line wrapping (`-l`).
+
 ## [v0.17.1](https://github.com/allthebacteria/atb-cli/releases/tag/v0.17.1) - 2026-06-04
 
 ### Fixed

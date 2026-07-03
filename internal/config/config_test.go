@@ -233,3 +233,42 @@ func TestExpandHome(t *testing.T) {
 		}
 	}
 }
+
+func TestAGCConfigRoundTrip(t *testing.T) {
+	cfg := config.Default()
+	cfg.AGC.ArchiveDir = "/big/disk/agc"
+	cfg.AGC.ArchiveMapURL = "https://example.test/map"
+	cfg.AGC.ArchiveBaseURL = "https://example.test/files="
+	cfg.AGC.OSFNode = "abcde"
+
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := config.Save(cfg, path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	got, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got.AGC.ArchiveDir != "/big/disk/agc" ||
+		got.AGC.ArchiveMapURL != "https://example.test/map" ||
+		got.AGC.ArchiveBaseURL != "https://example.test/files=" ||
+		got.AGC.OSFNode != "abcde" {
+		t.Errorf("AGC config did not round-trip: %+v", got.AGC)
+	}
+}
+
+func TestAGCConfigDefaultsEmpty(t *testing.T) {
+	// The feature relies on an absent [agc] section meaning "use the sources
+	// defaults", i.e. a zero-valued AGCConfig. Assert that invariant directly
+	// for Default() and for a freshly loaded config with no [agc] section.
+	if got := config.Default().AGC; got != (config.AGCConfig{}) {
+		t.Errorf("Default() must leave AGCConfig zero, got %+v", got)
+	}
+	cfg, err := config.Load(filepath.Join(t.TempDir(), "missing.toml"))
+	if err != nil {
+		t.Fatalf("Load missing: %v", err)
+	}
+	if cfg.AGC != (config.AGCConfig{}) {
+		t.Errorf("a config with no [agc] section must yield a zero AGCConfig, got %+v", cfg.AGC)
+	}
+}

@@ -12,6 +12,7 @@ Query and download AllTheBacteria genomes
 
 ### SEE ALSO
 
+* [atb agc](atb_agc.md)	 - Download and inspect genomes in AGC archives
 * [atb amr](atb_amr.md)	 - Query AMR gene data
 * [atb config](atb_config.md)	 - Manage atb configuration
 * [atb download](atb_download.md)	 - Download genome assemblies

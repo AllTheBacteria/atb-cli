@@ -1,0 +1,19 @@
+{
+  "data": [
+    {
+      "id": "6a35c88e71b808fa8816675d",
+      "type": "files",
+      "attributes": { "name": "agc_batches", "kind": "folder", "size": null, "extra": {} },
+      "relationships": { "files": { "links": { "related": { "href": "FOLDER_URL_PLACEHOLDER" } } } },
+      "links": {}
+    },
+    {
+      "id": "some_readme",
+      "type": "files",
+      "attributes": { "name": "README.md", "kind": "file", "size": 12, "extra": { "hashes": { "md5": "x" } } },
+      "links": { "download": "https://osf.io/download/readme/" }
+    }
+  ],
+  "links": { "next": null },
+  "meta": { "version": "2.0" }
+}
