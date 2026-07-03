@@ -13,6 +13,12 @@ All notable changes to `atb-cli` are documented here. Format follows [Keep a Cha
   (`contig[@sample][:from-to]`), by `--sample`, or the whole collection with
   `--all`. Output streams to stdout or a file (`-o`), with optional gzip
   (`--gzip`) and line wrapping (`-l`).
+- `atb agc download --species <name>` fetches assembled genomes from
+  AllTheBacteria's OSF storage: it resolves the per-species `.agc` batches from
+  a hosted index (cache-first, md5-verified) and extracts whole-batch FASTA via
+  `agc getcol`. `atb agc index` builds or refreshes that index. This by-species
+  path is a **preview** — it currently resolves batches from a staging OSF node
+  and is under active development, so archive locations and the index may change.
 
 ## [v0.17.1](https://github.com/allthebacteria/atb-cli/releases/tag/v0.17.1) - 2026-06-04
 
