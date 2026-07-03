@@ -157,12 +157,12 @@ const AGCBatchesFolder = "agc_batches"
 // <data-dir>/agc/ alongside the cached archives.
 const AGCIndexFilename = "atb_agc_files.tsv"
 
-// AGCIndexURL is the OSF /download/<guid>/ URL of the published AGC index TSV.
-// When set, atb downloads this single file (like the master IndexURL) instead of
-// crawling the node's agc_batches/ folder page by page. Empty means "not yet
-// published" — atb falls back to the live crawl, so this is the one line to
-// update once the index is hosted on OSF.
-const AGCIndexURL = ""
+// AGCIndexURL is the OSF /download/<guid>/ URL of the published AGC index TSV,
+// hosted on the main ATB node h7wzy alongside the master index. atb downloads this
+// single file (like the master IndexURL) instead of crawling the z7q5y
+// agc_batches/ folder page by page. Set it back to "" to fall back to the live
+// crawl (see useHostedAGCIndex). The batch rows inside still point at z7q5y.
+const AGCIndexURL = "https://osf.io/download/6a477a94899134067adf99c9/"
 
 // OSFNodeFilesURL returns the osfstorage root listing URL for an OSF node, the
 // entry point for crawling its folders.
