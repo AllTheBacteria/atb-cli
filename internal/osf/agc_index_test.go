@@ -62,12 +62,12 @@ func TestParseAGCNodePage(t *testing.T) {
 
 func TestSpeciesFromArchive(t *testing.T) {
 	cases := map[string]string{
-		"Acinetobacter_baylyi_global_ordered_0001.agc":     "Acinetobacter_baylyi",
-		"Streptococcus_suis_AA_global_ordered_0001.agc":    "Streptococcus_suis_AA",
-		"Pseudomonas_E_asiatica_global_ordered_0001.agc":   "Pseudomonas_E_asiatica",
-		"subthreshold_remainder_global_ordered_0091.agc":   "subthreshold_remainder",
-		"Acinetobacter_baylyi_global_ordered_0001":         "Acinetobacter_baylyi", // no extension
-		"weird_name_without_token.agc":                     "weird_name_without_token",
+		"Acinetobacter_baylyi_global_ordered_0001.agc":   "Acinetobacter_baylyi",
+		"Streptococcus_suis_AA_global_ordered_0001.agc":  "Streptococcus_suis_AA",
+		"Pseudomonas_E_asiatica_global_ordered_0001.agc": "Pseudomonas_E_asiatica",
+		"subthreshold_remainder_global_ordered_0091.agc": "subthreshold_remainder",
+		"Acinetobacter_baylyi_global_ordered_0001":       "Acinetobacter_baylyi", // no extension
+		"weird_name_without_token.agc":                   "weird_name_without_token",
 	}
 	for in, want := range cases {
 		if got := SpeciesFromArchive(in); got != want {
@@ -284,6 +284,107 @@ func TestFetchAGCIndexFromURL(t *testing.T) {
 	}
 	if hits != 2 {
 		t.Errorf("force refresh: %d total hits, want 2", hits)
+	}
+}
+
+func TestFetchAGCIndexFromURLInvalidatesOnURLChange(t *testing.T) {
+	const tsvA = "project\tproject_id\tfilename\turl\tmd5\tsize_mb\n" +
+		"Acinetobacter_baylyi\tz7q5y\tAcinetobacter_baylyi_global_ordered_0001.agc\thttps://osf.io/download/aaa/\t7be632ec46828a45a4d6d01d77b8099d\t3.890981\n" +
+		"Salmonella_enterica\tz7q5y\tSalmonella_enterica_global_ordered_0072.agc\thttps://osf.io/download/bbb/\t1650ac20b0da23db315b0c31dc04b8a1\t34.606133\n"
+	const tsvB = "project\tproject_id\tfilename\turl\tmd5\tsize_mb\n" +
+		"Mycoplasmoides_pneumoniae\tz7q5y\tMycoplasmoides_pneumoniae_global_ordered_0001.agc\thttps://osf.io/download/ccc/\tabc123abc123abc123abc123abc12345\t0.981234\n"
+
+	var hitsA, hitsB int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/tab-separated-values")
+		switch r.URL.Path {
+		case "/idxA":
+			hitsA++
+			w.Write([]byte(tsvA))
+		case "/idxB":
+			hitsB++
+			w.Write([]byte(tsvB))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	dir := t.TempDir()
+	urlA := server.URL + "/idxA"
+	urlB := server.URL + "/idxB"
+
+	// Populate the cache from urlA.
+	idxA, err := FetchAGCIndexFromURL(dir, urlA, false)
+	if err != nil {
+		t.Fatalf("FetchAGCIndexFromURL(urlA): %v", err)
+	}
+	if len(idxA.Entries) != 2 {
+		t.Fatalf("urlA: got %d entries, want 2", len(idxA.Entries))
+	}
+	if hitsA != 1 {
+		t.Fatalf("urlA cold: %d hits, want 1", hitsA)
+	}
+
+	// The cache file is still fresh, but the URL changed (the release scenario:
+	// a new binary points AGCIndexURL at a freshly published TSV). A URL-keyed
+	// cache must re-download from urlB rather than serve the stale urlA snapshot.
+	idxB, err := FetchAGCIndexFromURL(dir, urlB, false)
+	if err != nil {
+		t.Fatalf("FetchAGCIndexFromURL(urlB): %v", err)
+	}
+	if hitsB != 1 {
+		t.Fatalf("urlB with fresh but stale-source cache: %d hits, want 1 (cache not invalidated on URL change)", hitsB)
+	}
+	if len(idxB.Entries) != 1 || idxB.Entries[0].Project != "Mycoplasmoides_pneumoniae" {
+		t.Fatalf("urlB: got %+v, want the single Mycoplasmoides_pneumoniae entry", idxB.Entries)
+	}
+
+	// urlB is now the cached source: a repeat fetch serves it with no download.
+	if _, err := FetchAGCIndexFromURL(dir, urlB, false); err != nil {
+		t.Fatalf("FetchAGCIndexFromURL(urlB warm): %v", err)
+	}
+	if hitsB != 1 {
+		t.Errorf("urlB warm: %d hits, want 1 (should reuse the urlB cache)", hitsB)
+	}
+}
+
+func TestFetchAGCIndexFromURLMissingSidecarRefetches(t *testing.T) {
+	const tsv = "project\tproject_id\tfilename\turl\tmd5\tsize_mb\n" +
+		"Acinetobacter_baylyi\tz7q5y\tAcinetobacter_baylyi_global_ordered_0001.agc\thttps://osf.io/download/aaa/\t7be632ec46828a45a4d6d01d77b8099d\t3.890981\n"
+
+	var hits int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		w.Header().Set("Content-Type", "text/tab-separated-values")
+		w.Write([]byte(tsv))
+	}))
+	defer server.Close()
+
+	dir := t.TempDir()
+
+	// Simulate a cache written by an older atb that predates source markers: a
+	// fresh TSV on disk, but no .source sidecar next to it (the upgrade path).
+	cacheFile := filepath.Join(dir, sources.AGCIndexFilename)
+	if err := os.WriteFile(cacheFile, []byte(tsv), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// The cache is fresh, but with no marker atb cannot prove it matches the
+	// requested URL, so it must re-download rather than serve an unknown source.
+	if _, err := FetchAGCIndexFromURL(dir, server.URL+"/idx", false); err != nil {
+		t.Fatalf("FetchAGCIndexFromURL: %v", err)
+	}
+	if hits != 1 {
+		t.Fatalf("legacy cache without source marker: %d downloads, want 1", hits)
+	}
+
+	// The marker now exists, so a second fetch reuses the cache with no download.
+	if _, err := FetchAGCIndexFromURL(dir, server.URL+"/idx", false); err != nil {
+		t.Fatalf("FetchAGCIndexFromURL (warm): %v", err)
+	}
+	if hits != 1 {
+		t.Errorf("after marker written: %d downloads, want 1", hits)
 	}
 }
 

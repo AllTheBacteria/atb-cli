@@ -188,29 +188,66 @@ func CrawlAGCIndex(rootURL, nodeID string) (*Index, error) {
 	return CrawlAGCNode(client, folderURL, nodeID)
 }
 
+// agcCacheSourceSuffix names the sidecar file that records which source produced
+// the cached AGC index TSV. The cache filename is a constant, so without this
+// marker a cache built from one source would be reused for a different source
+// until CacheMaxAge expired — e.g. a new release pointing AGCIndexURL at a
+// freshly published TSV, or a switch to a different OSF node, would not reach
+// users with a warm cache. Comparing the recorded source against the requested
+// one makes a source change invalidate the cache at once.
+const agcCacheSourceSuffix = ".source"
+
+// readAGCCacheSource returns the source recorded next to the cached index, or ""
+// when no marker exists (a cache written by an older atb, or none at all).
+func readAGCCacheSource(cachePath string) string {
+	b, err := os.ReadFile(cachePath + agcCacheSourceSuffix)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
+}
+
+// writeAGCCacheSource records the source that produced the cached index so a
+// later fetch can tell whether reuse is safe. Best-effort: the index itself is
+// already cached, and a missing marker only forces a harmless re-fetch.
+func writeAGCCacheSource(cachePath, source string) {
+	_ = os.WriteFile(cachePath+agcCacheSourceSuffix, []byte(source+"\n"), 0644)
+}
+
+// agcCacheFresh reports whether the cached index at cachePath may be reused: it
+// must exist, be younger than CacheMaxAge, and carry a source marker equal to
+// want. A missing or mismatched marker means the cache came from a different
+// source (or an older atb) and must be refetched.
+func agcCacheFresh(cachePath, want string) bool {
+	info, err := os.Stat(cachePath)
+	if err != nil || time.Since(info.ModTime()) >= CacheMaxAge {
+		return false
+	}
+	return readAGCCacheSource(cachePath) == want
+}
+
 // FetchAGCIndexFromURL returns the AGC batch index by downloading a pre-built
 // TSV from url, mirroring FetchIndex: a cached copy under
-// <cacheDir>/atb_agc_files.tsv is reused while younger than CacheMaxAge,
-// otherwise the file is downloaded and written atomically before parsing. This
-// is the hosted counterpart to FetchAGCIndex's live crawl — once the index has
-// been published as a single OSF file (sources.AGCIndexURL) there is no need to
-// walk the node's agc_batches/ folder page by page. Set force=true to bypass a
-// fresh cache.
+// <cacheDir>/atb_agc_files.tsv is reused while younger than CacheMaxAge and
+// while its source marker still matches url, otherwise the file is downloaded
+// and written atomically (alongside a refreshed marker) before parsing. This is
+// the hosted counterpart to FetchAGCIndex's live crawl — once the index has been
+// published as a single OSF file (sources.AGCIndexURL) there is no need to walk
+// the node's agc_batches/ folder page by page. Set force=true to bypass a fresh
+// cache.
 func FetchAGCIndexFromURL(cacheDir, url string, force bool) (*Index, error) {
 	if err := os.MkdirAll(cacheDir, 0755); err != nil {
 		return nil, fmt.Errorf("create cache dir: %w", err)
 	}
 	cached := filepath.Join(cacheDir, sources.AGCIndexFilename)
 
-	if !force {
-		if info, err := os.Stat(cached); err == nil && time.Since(info.ModTime()) < CacheMaxAge {
-			f, err := os.Open(cached)
-			if err != nil {
-				return nil, fmt.Errorf("open cached AGC index: %w", err)
-			}
-			defer f.Close()
-			return ParseIndex(f)
+	if !force && agcCacheFresh(cached, url) {
+		f, err := os.Open(cached)
+		if err != nil {
+			return nil, fmt.Errorf("open cached AGC index: %w", err)
 		}
+		defer f.Close()
+		return ParseIndex(f)
 	}
 
 	client := &http.Client{Timeout: 60 * time.Second}
@@ -236,32 +273,32 @@ func FetchAGCIndexFromURL(cacheDir, url string, force bool) (*Index, error) {
 		os.Remove(tmp)
 		return nil, fmt.Errorf("rename AGC index: %w", err)
 	}
+	writeAGCCacheSource(cached, url)
 
 	return ParseIndex(strings.NewReader(string(body)))
 }
 
 // FetchAGCIndex returns the AGC batch index for an OSF node, mirroring
-// FetchIndex: a cached TSV is reused while younger than CacheMaxAge, otherwise
-// the node's agc_batches/ folder is crawled and the result written atomically
-// to <cacheDir>/atb_agc_files.tsv. rootURL is the node's osfstorage listing
-// (build it with sources.OSFNodeFilesURL); it is a parameter so the crawl is
-// testable against a local server. nodeID is stamped onto every entry's
-// ProjectID. Set force=true to bypass a fresh cache.
+// FetchIndex: a cached TSV is reused while younger than CacheMaxAge and while
+// its source marker still matches rootURL, otherwise the node's agc_batches/
+// folder is crawled and the result written atomically to
+// <cacheDir>/atb_agc_files.tsv (alongside a refreshed marker). rootURL is the
+// node's osfstorage listing (build it with sources.OSFNodeFilesURL); it is a
+// parameter so the crawl is testable against a local server. nodeID is stamped
+// onto every entry's ProjectID. Set force=true to bypass a fresh cache.
 func FetchAGCIndex(cacheDir, rootURL, nodeID string, force bool) (*Index, error) {
 	if err := os.MkdirAll(cacheDir, 0755); err != nil {
 		return nil, fmt.Errorf("create cache dir: %w", err)
 	}
 	cached := filepath.Join(cacheDir, sources.AGCIndexFilename)
 
-	if !force {
-		if info, err := os.Stat(cached); err == nil && time.Since(info.ModTime()) < CacheMaxAge {
-			f, err := os.Open(cached)
-			if err != nil {
-				return nil, fmt.Errorf("open cached AGC index: %w", err)
-			}
-			defer f.Close()
-			return ParseIndex(f)
+	if !force && agcCacheFresh(cached, rootURL) {
+		f, err := os.Open(cached)
+		if err != nil {
+			return nil, fmt.Errorf("open cached AGC index: %w", err)
 		}
+		defer f.Close()
+		return ParseIndex(f)
 	}
 
 	idx, err := CrawlAGCIndex(rootURL, nodeID)
@@ -284,6 +321,7 @@ func FetchAGCIndex(cacheDir, rootURL, nodeID string, force bool) (*Index, error)
 		os.Remove(tmp)
 		return nil, fmt.Errorf("rename AGC index: %w", err)
 	}
+	writeAGCCacheSource(cached, rootURL)
 
 	return idx, nil
 }
