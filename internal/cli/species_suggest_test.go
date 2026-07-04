@@ -34,9 +34,37 @@ func TestPrintSpeciesSuggestions(t *testing.T) {
 	if !strings.Contains(out, "Pseudomonas_E fluorescens") {
 		t.Fatalf("expected GTDB suggestion, got:\n%s", out)
 	}
-	// The closest GTDB match must outrank the other Pseudomonas species.
-	if strings.Index(out, "Pseudomonas_E fluorescens") > strings.Index(out, "Pseudomonas aeruginosa") {
-		t.Errorf("expected 'Pseudomonas_E fluorescens' ranked above 'Pseudomonas aeruginosa', got:\n%s", out)
+	// Issue #25: distant same-genus noise must not be offered. "Pseudomonas
+	// aeruginosa" differs from the query by a whole epithet, so it is not a real
+	// near-spelling and would only mislead a user who meant P. fluorescens.
+	if strings.Contains(out, "Pseudomonas aeruginosa") {
+		t.Errorf("did not expect distant same-genus name 'Pseudomonas aeruginosa' to be suggested, got:\n%s", out)
+	}
+}
+
+// Issue #25: when the queried species has no near-spelling among the candidates
+// - e.g. an archaeal name, absent from the bacteria-only collection - the helper
+// must say so plainly and point at how to browse, rather than offer the nearest
+// unrelated bacterium as if it were a match.
+func TestPrintSpeciesSuggestionsOutOfDataset(t *testing.T) {
+	names := []string{
+		"Escherichia coli",
+		"Alicyclobacillus acidocaldarius",
+		"Staphylococcus aureus",
+	}
+
+	var buf bytes.Buffer
+	printSpeciesSuggestions(&buf, "Sulfolobus acidocaldarius", names)
+	out := buf.String()
+
+	if strings.Contains(out, "Did you mean") {
+		t.Errorf("did not expect a 'Did you mean' hint for an out-of-dataset name, got:\n%s", out)
+	}
+	if !strings.Contains(out, "no close match") || !strings.Contains(out, "bacteria-only") {
+		t.Errorf("expected an out-of-dataset message naming the bacteria-only scope, got:\n%s", out)
+	}
+	if !strings.Contains(out, "--species-like") {
+		t.Errorf("expected a browse hint pointing at --species-like, got:\n%s", out)
 	}
 }
 
