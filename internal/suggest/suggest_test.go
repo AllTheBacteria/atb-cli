@@ -52,3 +52,22 @@ func TestSuggest(t *testing.T) {
 		}
 	}
 }
+
+// Issue #25: an out-of-dataset query has no near-spelling among the candidates,
+// so the suggester must return nothing rather than offer the nearest unrelated
+// name. AllTheBacteria is bacteria-only, so an archaeal name like "Sulfolobus
+// acidocaldarius" is absent; it shares only its epithet with the bacterium
+// "Alicyclobacillus acidocaldarius" - far too distant to be a real suggestion.
+func TestSuggestRejectsOutOfDataset(t *testing.T) {
+	species := []string{
+		"Escherichia coli",
+		"Alicyclobacillus acidocaldarius",
+		"Staphylococcus aureus",
+	}
+
+	got := Suggest("Sulfolobus acidocaldarius", species, 5)
+	if len(got) != 0 {
+		t.Errorf("Suggest(%q) = %v, want no suggestions for an out-of-dataset name",
+			"Sulfolobus acidocaldarius", got)
+	}
+}

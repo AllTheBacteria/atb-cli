@@ -356,14 +356,22 @@ func queryToOutputRows(rows []query.ResultRow) []output.Row {
 	return out
 }
 
-// printSpeciesSuggestions writes a "Did you mean" hint to w when a species
-// filter returned nothing. It surfaces the closest names among candidates —
-// e.g. the GTDB-suffixed names stored in the index ("Pseudomonas_E
-// fluorescens") that a user typing the NCBI name ("Pseudomonas fluorescens")
-// would otherwise never find. It stays silent when there are no candidates.
+// printSpeciesSuggestions writes guidance to w when a species filter returned
+// nothing. If a candidate name is a near-spelling of the query it prints a "Did
+// you mean" hint - e.g. the GTDB-suffixed names stored in the index
+// ("Pseudomonas_E fluorescens") that a user typing the NCBI name ("Pseudomonas
+// fluorescens") would otherwise never find. If nothing is close (e.g. an
+// archaeal name, absent from the bacteria-only collection) it says so plainly
+// and points at how to browse, rather than offer a distant unrelated name. It
+// stays silent when there are no candidates at all.
 func printSpeciesSuggestions(w io.Writer, species string, candidates []string) {
+	if len(candidates) == 0 {
+		return
+	}
 	suggestions := suggest.Suggest(species, candidates, 5)
 	if len(suggestions) == 0 {
+		fmt.Fprintf(w, "No results for species %q, and no close match exists in AllTheBacteria (a bacteria-only collection).\n", species)
+		fmt.Fprintf(w, "Browse available species with: atb query --species-like %q\n", "Prefix%")
 		return
 	}
 	fmt.Fprintf(w, "No results for species %q. Did you mean:\n", species)
