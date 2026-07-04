@@ -39,11 +39,16 @@ atb agc download --species "Mycoplasmoides pneumoniae" \
 atb agc download --species "Salmonella enterica" --dry-run
 ```
 
-The first by-species run crawls the OSF node and caches the index
-(`atb_agc_files.tsv`) for 7 days. Use `--refresh` to re-crawl and re-download.
+The first by-species run fetches the index (`atb_agc_files.tsv`) and caches it for
+7 days. By default `atb` downloads the pre-built index published on the OSF node
+instead of crawling it page by page; if that published file is unavailable (or you
+target a non-default node) it falls back to a live crawl of the node's
+`agc_batches/` folder. The cache records which source produced it, so a release
+that points at a freshly published index refreshes your local copy automatically.
+Use `--refresh` to force a re-fetch of the index and re-download archives.
 
 !!! tip "Offline or pinned index"
-    Pass a local index TSV with `--agc-index` to skip the network crawl — useful for reproducible runs or air-gapped environments. Generate the file once with [`atb agc index`](#build-the-by-species-index):
+    Pass a local index TSV with `--agc-index` to skip the network fetch entirely - useful for reproducible runs or air-gapped environments. Generate the file once with [`atb agc index`](#build-the-by-species-index):
 
     ```bash
     atb agc download --species "Acinetobacter baylyi" \
@@ -86,11 +91,13 @@ Useful flags (both modes):
 | `--combine` | One output stream/file instead of per-sample files |
 | `-o`, `--output-dir` | Output directory (per-sample) or file (`--combine`); stdout if omitted |
 | `--gzip N` | gzip the output at level N (0 = uncompressed) |
+| `--line-length N` | FASTA line wrap width (default: agc's 80) |
 | `-t`, `--threads N` | agc extraction threads (default: cores − 1) |
 | `-p`, `--parallel N` | Parallel archive downloads |
 | `--archive-dir DIR` | Where to cache `.agc` archives (default `<data-dir>/agc`) |
 | `--refresh` | Re-download the index/map and archives even if cached |
 | `--dry-run` | Resolve and list archives without downloading or extracting |
+| `--keep-going` | Continue past unresolved or failed samples (on by default); still exits non-zero if any |
 
 ## Build the by-species index
 
