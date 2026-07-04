@@ -210,6 +210,20 @@ func newQueryCmd() *cobra.Command {
 							for i, r := range idxRows {
 								results[i] = query.ResultRow(r)
 							}
+							// A species filter that matched nothing on the fast
+							// path still deserves a "Did you mean" hint. The goto
+							// below skips the parquet fallback (and its
+							// suggester), so suggest here from the index's own
+							// species list.
+							if len(results) == 0 && filters.Species != "" {
+								if counts, sErr := db.SpeciesList(0); sErr == nil {
+									names := make([]string, len(counts))
+									for i, c := range counts {
+										names[i] = c.Species
+									}
+									printSpeciesSuggestions(os.Stderr, filters.Species, names)
+								}
+							}
 							// Skip the parquet scan and post-processing below;
 							// index already applied limit/offset/sort.
 							goto renderOutput
@@ -243,13 +257,7 @@ func newQueryCmd() *cobra.Command {
 					for s := range speciesSet {
 						allSpecies = append(allSpecies, s)
 					}
-					suggestions := suggest.Suggest(filters.Species, allSpecies, 5)
-					if len(suggestions) > 0 {
-						fmt.Fprintf(os.Stderr, "No results for species %q. Did you mean:\n", filters.Species)
-						for _, s := range suggestions {
-							fmt.Fprintf(os.Stderr, "  %s\n", s)
-						}
-					}
+					printSpeciesSuggestions(os.Stderr, filters.Species, allSpecies)
 				}
 			}
 
@@ -346,6 +354,22 @@ func queryToOutputRows(rows []query.ResultRow) []output.Row {
 		out[i] = output.Row(r)
 	}
 	return out
+}
+
+// printSpeciesSuggestions writes a "Did you mean" hint to w when a species
+// filter returned nothing. It surfaces the closest names among candidates —
+// e.g. the GTDB-suffixed names stored in the index ("Pseudomonas_E
+// fluorescens") that a user typing the NCBI name ("Pseudomonas fluorescens")
+// would otherwise never find. It stays silent when there are no candidates.
+func printSpeciesSuggestions(w io.Writer, species string, candidates []string) {
+	suggestions := suggest.Suggest(species, candidates, 5)
+	if len(suggestions) == 0 {
+		return
+	}
+	fmt.Fprintf(w, "No results for species %q. Did you mean:\n", species)
+	for _, s := range suggestions {
+		fmt.Fprintf(w, "  %s\n", s)
+	}
 }
 
 // parseCSVURLs reads a CSV or TSV file and extracts the aws_url column.
