@@ -37,6 +37,23 @@ func TestAGCDownloadHelpListsFlags(t *testing.T) {
 	}
 }
 
+// TestAGCDownloadHelpAgcIndexDefault guards that the --agc-index help text
+// reflects the current default: loadAGCIndex downloads the published OSF index
+// first and only crawls as a fallback, so the help must advertise the published
+// index and must not claim the old crawl-only default.
+func TestAGCDownloadHelpAgcIndexDefault(t *testing.T) {
+	stdout, _, err := runCmd("agc", "download", "--help")
+	if err != nil {
+		t.Fatalf("agc download --help: %v", err)
+	}
+	if !strings.Contains(stdout, "published index") {
+		t.Errorf("expected --agc-index help to mention the published-index default, got:\n%s", stdout)
+	}
+	if strings.Contains(stdout, "crawl the OSF node and cache it") {
+		t.Errorf("stale --agc-index help still claims a crawl-only default:\n%s", stdout)
+	}
+}
+
 // TestTopLevelFetchGenomesRemoved guards the rename: the command moved under the
 // agc group, so the old top-level path must no longer resolve.
 func TestTopLevelFetchGenomesRemoved(t *testing.T) {
