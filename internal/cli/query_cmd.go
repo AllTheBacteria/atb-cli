@@ -372,8 +372,11 @@ func printSpeciesSuggestions(w io.Writer, species string, candidates []string) {
 	}
 }
 
-// parseCSVURLs reads a CSV or TSV file and extracts the aws_url column.
-// Falls back to sample_accession if aws_url is absent.
+// parseCSVURLs reads a CSV or TSV file and extracts download URLs. It prefers
+// the aws_url column; when that is absent (e.g. an mlst result file) it falls
+// back to sample_accession and expands each bare accession into a full S3
+// assembly URL, so downstream download works regardless of which columns the
+// source file carries.
 func parseCSVURLs(path string) ([]string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -440,6 +443,12 @@ func parseCSVURLs(path string) ([]string, error) {
 		if col < len(record) {
 			v := strings.TrimSpace(record[col])
 			if v != "" {
+				// A sample_accession fallback yields a bare ID; turn it into a
+				// full S3 assembly URL. Values that already carry a scheme
+				// (an aws_url column) pass through untouched.
+				if !strings.Contains(v, "://") {
+					v = buildAssemblyURL(v)
+				}
 				urls = append(urls, v)
 			}
 		}
