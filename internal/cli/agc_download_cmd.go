@@ -44,8 +44,9 @@ stdin.
 By species (--species "Escherichia coli"): every batch named
 <Species>_global_ordered_* is downloaded and extracted whole — no sample->archive
 map needed. Batches are resolved from a separate AGC index (atb_agc_files.tsv),
-either crawled from the OSF node and cached, or read from a local --agc-index
-file. This is the bulk "give me all of species X" path.
+either downloaded from the OSF node (its published index by default, a live
+crawl as fallback) and cached, or read from a local --agc-index file. This is
+the bulk "give me all of species X" path.
 
 Run 'atb agc install' once to install the agc binary. By default each sample is
 written to <output-dir>/<accession>.fa; use --combine to stream everything to one
@@ -227,7 +228,7 @@ file (or stdout).`,
 	cmd.Flags().StringVar(&archiveDir, "archive-dir", "", "directory to cache .agc archives (default <data-dir>/agc)")
 	cmd.Flags().StringVar(&species, "species", "", "fetch every batch of this species (whole-batch mode; no accession map needed)")
 	cmd.Flags().StringVar(&osfNode, "osf-node", "", "OSF node to crawl for the by-species index (default from config or the staging node)")
-	cmd.Flags().StringVar(&agcIndex, "agc-index", "", "local AGC index TSV for --species (default: crawl the OSF node and cache it)")
+	cmd.Flags().StringVar(&agcIndex, "agc-index", "", "local AGC index TSV for --species (default: download the published OSF index, else crawl)")
 	cmd.Flags().IntVarP(&threads, "threads", "t", 0, "agc threads (default: all cores minus one)")
 	cmd.Flags().IntVar(&lineLength, "line-length", 0, "FASTA line wrap length (default: agc's 80)")
 	cmd.Flags().IntVar(&gzipLevel, "gzip", 0, "gzip output at this level (0 = uncompressed)")
