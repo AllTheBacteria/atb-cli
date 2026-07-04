@@ -210,6 +210,20 @@ func newQueryCmd() *cobra.Command {
 							for i, r := range idxRows {
 								results[i] = query.ResultRow(r)
 							}
+							// A species filter that matched nothing on the fast
+							// path still deserves a "Did you mean" hint. The goto
+							// below skips the parquet fallback (and its
+							// suggester), so suggest here from the index's own
+							// species list.
+							if len(results) == 0 && filters.Species != "" {
+								if counts, sErr := db.SpeciesList(0); sErr == nil {
+									names := make([]string, len(counts))
+									for i, c := range counts {
+										names[i] = c.Species
+									}
+									printSpeciesSuggestions(os.Stderr, filters.Species, names)
+								}
+							}
 							// Skip the parquet scan and post-processing below;
 							// index already applied limit/offset/sort.
 							goto renderOutput
@@ -243,13 +257,7 @@ func newQueryCmd() *cobra.Command {
 					for s := range speciesSet {
 						allSpecies = append(allSpecies, s)
 					}
-					suggestions := suggest.Suggest(filters.Species, allSpecies, 5)
-					if len(suggestions) > 0 {
-						fmt.Fprintf(os.Stderr, "No results for species %q. Did you mean:\n", filters.Species)
-						for _, s := range suggestions {
-							fmt.Fprintf(os.Stderr, "  %s\n", s)
-						}
-					}
+					printSpeciesSuggestions(os.Stderr, filters.Species, allSpecies)
 				}
 			}
 
@@ -348,8 +356,27 @@ func queryToOutputRows(rows []query.ResultRow) []output.Row {
 	return out
 }
 
-// parseCSVURLs reads a CSV or TSV file and extracts the aws_url column.
-// Falls back to sample_accession if aws_url is absent.
+// printSpeciesSuggestions writes a "Did you mean" hint to w when a species
+// filter returned nothing. It surfaces the closest names among candidates —
+// e.g. the GTDB-suffixed names stored in the index ("Pseudomonas_E
+// fluorescens") that a user typing the NCBI name ("Pseudomonas fluorescens")
+// would otherwise never find. It stays silent when there are no candidates.
+func printSpeciesSuggestions(w io.Writer, species string, candidates []string) {
+	suggestions := suggest.Suggest(species, candidates, 5)
+	if len(suggestions) == 0 {
+		return
+	}
+	fmt.Fprintf(w, "No results for species %q. Did you mean:\n", species)
+	for _, s := range suggestions {
+		fmt.Fprintf(w, "  %s\n", s)
+	}
+}
+
+// parseCSVURLs reads a CSV or TSV file and extracts download URLs. It prefers
+// the aws_url column; when that is absent (e.g. an mlst result file) it falls
+// back to sample_accession and expands each bare accession into a full S3
+// assembly URL, so downstream download works regardless of which columns the
+// source file carries.
 func parseCSVURLs(path string) ([]string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -416,6 +443,12 @@ func parseCSVURLs(path string) ([]string, error) {
 		if col < len(record) {
 			v := strings.TrimSpace(record[col])
 			if v != "" {
+				// A sample_accession fallback yields a bare ID; turn it into a
+				// full S3 assembly URL. Values that already carry a scheme
+				// (an aws_url column) pass through untouched.
+				if !strings.Contains(v, "://") {
+					v = buildAssemblyURL(v)
+				}
 				urls = append(urls, v)
 			}
 		}
