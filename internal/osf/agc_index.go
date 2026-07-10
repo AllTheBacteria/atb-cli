@@ -3,6 +3,7 @@ package osf
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,6 +15,11 @@ import (
 
 	"github.com/allthebacteria/atb-cli/internal/sources"
 )
+
+// ErrFolderNotFound is returned (wrapped) when a node listing has no folder of
+// the requested name - distinct from a network or decode failure, so a
+// still-provisioning collection node can be skipped without masking real errors.
+var ErrFolderNotFound = errors.New("folder not found on OSF node")
 
 // speciesToken separates the species prefix from the batch ordinal in an AGC
 // archive filename: "<Species>_global_ordered_<NNNN>.agc".
@@ -170,7 +176,17 @@ func findFolderURL(client *http.Client, rootURL, folderName string) (string, err
 			return href, nil
 		}
 	}
-	return "", fmt.Errorf("folder %q not found on OSF node", folderName)
+	return "", fmt.Errorf("folder %q: %w", folderName, ErrFolderNotFound)
+}
+
+// crawlNodeFolder resolves folderName under the node listed at rootURL and
+// crawls every page of it, stamping nodeID onto each entry's ProjectID.
+func crawlNodeFolder(client *http.Client, rootURL, folderName, nodeID string) (*Index, error) {
+	folderURL, err := findFolderURL(client, rootURL, folderName)
+	if err != nil {
+		return nil, err
+	}
+	return CrawlAGCNode(client, folderURL, nodeID)
 }
 
 // CrawlAGCIndex resolves the agc_batches/ folder from an OSF node's root
@@ -181,11 +197,43 @@ func findFolderURL(client *http.Client, rootURL, folderName string) (string, err
 // user wants it.
 func CrawlAGCIndex(rootURL, nodeID string) (*Index, error) {
 	client := &http.Client{Timeout: 2 * time.Minute}
-	folderURL, err := findFolderURL(client, rootURL, sources.AGCBatchesFolder)
-	if err != nil {
-		return nil, err
+	return crawlNodeFolder(client, rootURL, sources.AGCBatchesFolder, nodeID)
+}
+
+// CrawlAGCCollection crawls the AGCArchivesFolder of every node in nodes and
+// concatenates the results into one Index. rootURLFor maps a node id to its
+// osfstorage listing URL (sources.OSFNodeFilesURL in production; a test double
+// otherwise). A node whose agc_archives/ folder does not exist yet is skipped -
+// it is still provisioning - rather than failing the whole crawl; any other
+// error (network, HTTP, decode) is returned so a real outage is not silently
+// hidden. An existing but partially populated folder simply contributes fewer
+// rows.
+func CrawlAGCCollection(rootURLFor func(nodeID string) string, nodes []sources.AGCNode) (*Index, error) {
+	client := &http.Client{Timeout: 5 * time.Minute}
+	combined := &Index{}
+	for _, n := range nodes {
+		idx, err := crawlNodeFolder(client, rootURLFor(n.ID), sources.AGCArchivesFolder, n.ID)
+		if err != nil {
+			if errors.Is(err, ErrFolderNotFound) {
+				continue
+			}
+			return nil, fmt.Errorf("crawl node %s: %w", n.ID, err)
+		}
+		combined.Entries = append(combined.Entries, idx.Entries...)
 	}
-	return CrawlAGCNode(client, folderURL, nodeID)
+	return combined, nil
+}
+
+// CollectionCacheSource is the cache source-marker for a combined collection
+// crawl over nodes. It is exposed so a warm cache can be recognised across the
+// exact node set that produced it: changing the set changes the marker and
+// invalidates the cache. Tests also use it to seed a warm cache offline.
+func CollectionCacheSource(nodes []sources.AGCNode) string {
+	ids := make([]string, len(nodes))
+	for i, n := range nodes {
+		ids[i] = n.ID
+	}
+	return "agc-collection:" + strings.Join(ids, ",")
 }
 
 // agcCacheSourceSuffix names the sidecar file that records which source produced
@@ -278,6 +326,60 @@ func FetchAGCIndexFromURL(cacheDir, url string, force bool) (*Index, error) {
 	return ParseIndex(strings.NewReader(string(body)))
 }
 
+// writeIndexCache atomically writes idx as a TSV to cached and records source
+// in the sidecar marker, so a later fetch can tell whether the cache may be reused.
+func writeIndexCache(cached string, idx *Index, source string) error {
+	tmp := cached + ".tmp"
+	out, err := os.Create(tmp)
+	if err != nil {
+		return fmt.Errorf("create temp AGC index: %w", err)
+	}
+	if err := WriteAGCIndexTSV(idx, out); err != nil {
+		out.Close()
+		os.Remove(tmp)
+		return fmt.Errorf("write AGC index: %w", err)
+	}
+	out.Close()
+	if err := os.Rename(tmp, cached); err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("rename AGC index: %w", err)
+	}
+	writeAGCCacheSource(cached, source)
+	return nil
+}
+
+// FetchAGCCollection returns the combined batch index across the collection
+// nodes, caching the merged TSV under <cacheDir>/atb_agc_files.tsv with a source
+// marker derived from the node set (CollectionCacheSource). A cached copy younger
+// than CacheMaxAge whose marker still matches is reused; otherwise the nodes are
+// crawled and the result cached atomically. rootURLFor is sources.OSFNodeFilesURL
+// in production. Set force=true to bypass a fresh cache.
+func FetchAGCCollection(cacheDir string, rootURLFor func(nodeID string) string, nodes []sources.AGCNode, force bool) (*Index, error) {
+	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+		return nil, fmt.Errorf("create cache dir: %w", err)
+	}
+	cached := filepath.Join(cacheDir, sources.AGCIndexFilename)
+	source := CollectionCacheSource(nodes)
+
+	if !force && agcCacheFresh(cached, source) {
+		f, err := os.Open(cached)
+		if err != nil {
+			return nil, fmt.Errorf("open cached AGC index: %w", err)
+		}
+		defer f.Close()
+		return ParseIndex(f)
+	}
+
+	idx, err := CrawlAGCCollection(rootURLFor, nodes)
+	if err != nil {
+		return nil, err
+	}
+	if err := writeIndexCache(cached, idx, source); err != nil {
+		return nil, err
+	}
+	return idx, nil
+}
+
 // FetchAGCIndex returns the AGC batch index for an OSF node, mirroring
 // FetchIndex: a cached TSV is reused while younger than CacheMaxAge and while
 // its source marker still matches rootURL, otherwise the node's agc_batches/
@@ -305,23 +407,9 @@ func FetchAGCIndex(cacheDir, rootURL, nodeID string, force bool) (*Index, error)
 	if err != nil {
 		return nil, err
 	}
-
-	tmp := cached + ".tmp"
-	out, err := os.Create(tmp)
-	if err != nil {
-		return nil, fmt.Errorf("create temp AGC index: %w", err)
+	if err := writeIndexCache(cached, idx, rootURL); err != nil {
+		return nil, err
 	}
-	if err := WriteAGCIndexTSV(idx, out); err != nil {
-		out.Close()
-		os.Remove(tmp)
-		return nil, fmt.Errorf("write AGC index: %w", err)
-	}
-	out.Close()
-	if err := os.Rename(tmp, cached); err != nil {
-		os.Remove(tmp)
-		return nil, fmt.Errorf("rename AGC index: %w", err)
-	}
-	writeAGCCacheSource(cached, rootURL)
 
 	return idx, nil
 }

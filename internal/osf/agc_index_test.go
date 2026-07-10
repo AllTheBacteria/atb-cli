@@ -2,6 +2,8 @@ package osf
 
 import (
 	"bytes"
+	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -417,5 +419,202 @@ func TestWriteAGCIndexTSVRoundTrip(t *testing.T) {
 			!approxEq(g.SizeMB, want.SizeMB) {
 			t.Errorf("round-trip entry %d = %+v, want %+v", i, g, want)
 		}
+	}
+}
+
+// osfFolderRoot renders an OSF node root listing with a single folder whose
+// "related" contents link points at folderURL.
+func osfFolderRoot(folderName, folderURL string) string {
+	return `{"data":[{"attributes":{"name":"` + folderName + `","kind":"folder"},` +
+		`"relationships":{"files":{"links":{"related":{"href":"` + folderURL + `"}}}}}],` +
+		`"links":{"next":null}}`
+}
+
+// osfFilePage renders a one-file OSF folder listing page (no further pages).
+func osfFilePage(filename, downloadURL, md5 string, size int) string {
+	return fmt.Sprintf(`{"data":[{"attributes":{"name":%q,"kind":"file","size":%d,`+
+		`"extra":{"hashes":{"md5":%q}}},"links":{"download":%q}}],"links":{"next":null}}`,
+		filename, size, md5, downloadURL)
+}
+
+func TestCrawlAGCCollection(t *testing.T) {
+	var srvA, srvB *httptest.Server
+	srvA = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/root":
+			io.WriteString(w, osfFolderRoot(sources.AGCArchivesFolder, srvA.URL+"/folder"))
+		case "/folder":
+			io.WriteString(w, osfFilePage("Escherichia_coli_global_ordered_0001.agc", "https://osf.io/download/ec1/", "md5ec", 1000000))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srvA.Close()
+	srvB = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/root":
+			io.WriteString(w, osfFolderRoot(sources.AGCArchivesFolder, srvB.URL+"/folder"))
+		case "/folder":
+			io.WriteString(w, osfFilePage("Salmonella_enterica_global_ordered_0072.agc", "https://osf.io/download/se72/", "md5se", 2000000))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srvB.Close()
+
+	nodes := []sources.AGCNode{{ID: "nodeA", Part: "major"}, {ID: "nodeB", Part: "dustbin"}}
+	rootURLFor := func(id string) string {
+		if id == "nodeA" {
+			return srvA.URL + "/root"
+		}
+		return srvB.URL + "/root"
+	}
+	idx, err := CrawlAGCCollection(rootURLFor, nodes)
+	if err != nil {
+		t.Fatalf("CrawlAGCCollection: %v", err)
+	}
+	if len(idx.Entries) != 2 {
+		t.Fatalf("got %d entries, want 2", len(idx.Entries))
+	}
+	byNode := map[string]Entry{}
+	for _, e := range idx.Entries {
+		byNode[e.ProjectID] = e
+	}
+	if byNode["nodeA"].Filename != "Escherichia_coli_global_ordered_0001.agc" {
+		t.Errorf("nodeA entry wrong: %+v", byNode["nodeA"])
+	}
+	if byNode["nodeB"].Project != "Salmonella_enterica" {
+		t.Errorf("nodeB project wrong: %+v", byNode["nodeB"])
+	}
+}
+
+func TestCrawlAGCCollectionSkipsMissingFolder(t *testing.T) {
+	var good *httptest.Server
+	good = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/root":
+			io.WriteString(w, osfFolderRoot(sources.AGCArchivesFolder, good.URL+"/folder"))
+		case "/folder":
+			io.WriteString(w, osfFilePage("Escherichia_coli_global_ordered_0001.agc", "https://osf.io/download/ec1/", "md5ec", 1000000))
+		}
+	}))
+	defer good.Close()
+	// This node's root has no agc_archives folder yet (still provisioning).
+	empty := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, `{"data":[],"links":{"next":null}}`)
+	}))
+	defer empty.Close()
+
+	nodes := []sources.AGCNode{{ID: "good"}, {ID: "empty"}}
+	rootURLFor := func(id string) string {
+		if id == "good" {
+			return good.URL + "/root"
+		}
+		return empty.URL + "/root"
+	}
+	idx, err := CrawlAGCCollection(rootURLFor, nodes)
+	if err != nil {
+		t.Fatalf("a still-provisioning node must be skipped, got error: %v", err)
+	}
+	if len(idx.Entries) != 1 || idx.Entries[0].ProjectID != "good" {
+		t.Fatalf("want only the good node's single entry, got %+v", idx.Entries)
+	}
+}
+
+func TestCrawlAGCCollectionSurfacesNetworkError(t *testing.T) {
+	down := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "boom", http.StatusInternalServerError)
+	}))
+	defer down.Close()
+	nodes := []sources.AGCNode{{ID: "down"}}
+	_, err := CrawlAGCCollection(func(string) string { return down.URL + "/root" }, nodes)
+	if err == nil {
+		t.Fatal("an HTTP 500 on a node must surface as an error, not be silently skipped")
+	}
+}
+
+func TestCollectionCacheSource(t *testing.T) {
+	a := CollectionCacheSource([]sources.AGCNode{{ID: "x"}, {ID: "y"}})
+	b := CollectionCacheSource([]sources.AGCNode{{ID: "x"}, {ID: "z"}})
+	if a == b {
+		t.Errorf("different node sets must yield different markers: %q == %q", a, b)
+	}
+	if !strings.Contains(a, "x") || !strings.Contains(a, "y") {
+		t.Errorf("marker should name the nodes, got %q", a)
+	}
+}
+
+func TestFetchAGCCollectionCacheFirst(t *testing.T) {
+	var hits int
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		switch r.URL.Path {
+		case "/root":
+			io.WriteString(w, osfFolderRoot(sources.AGCArchivesFolder, srv.URL+"/folder"))
+		case "/folder":
+			io.WriteString(w, osfFilePage("Escherichia_coli_global_ordered_0001.agc", "https://osf.io/download/ec1/", "md5ec", 1000000))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	nodes := []sources.AGCNode{{ID: "only"}}
+	rootURLFor := func(string) string { return srv.URL + "/root" }
+
+	idx, err := FetchAGCCollection(dir, rootURLFor, nodes, false)
+	if err != nil {
+		t.Fatalf("cold: %v", err)
+	}
+	if len(idx.Entries) != 1 {
+		t.Fatalf("cold: got %d, want 1", len(idx.Entries))
+	}
+	if _, err := os.Stat(filepath.Join(dir, sources.AGCIndexFilename)); err != nil {
+		t.Fatalf("cold: index TSV not written: %v", err)
+	}
+	coldHits := hits
+
+	if _, err := FetchAGCCollection(dir, rootURLFor, nodes, false); err != nil {
+		t.Fatalf("warm: %v", err)
+	}
+	if hits != coldHits {
+		t.Errorf("warm cache made %d extra hit(s), want 0", hits-coldHits)
+	}
+
+	if _, err := FetchAGCCollection(dir, rootURLFor, nodes, true); err != nil {
+		t.Fatalf("force: %v", err)
+	}
+	if hits == coldHits {
+		t.Error("force must re-crawl")
+	}
+}
+
+func TestFetchAGCCollectionInvalidatesOnNodeSetChange(t *testing.T) {
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/root":
+			io.WriteString(w, osfFolderRoot(sources.AGCArchivesFolder, srv.URL+"/folder"))
+		case "/folder":
+			io.WriteString(w, osfFilePage("Escherichia_coli_global_ordered_0001.agc", "https://osf.io/download/ec1/", "md5ec", 1000000))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	dir := t.TempDir()
+	rootURLFor := func(string) string { return srv.URL + "/root" }
+
+	if _, err := FetchAGCCollection(dir, rootURLFor, []sources.AGCNode{{ID: "a"}}, false); err != nil {
+		t.Fatal(err)
+	}
+	idx, err := FetchAGCCollection(dir, rootURLFor, []sources.AGCNode{{ID: "a"}, {ID: "b"}}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(idx.Entries) != 2 {
+		t.Fatalf("node-set change must re-crawl both nodes, got %d entries", len(idx.Entries))
 	}
 }
