@@ -687,19 +687,23 @@ Add `"archive/zip"` and `"bytes"` to the imports. Add the reader and restructure
 
 ```go
 // openMap returns a reader over the accession->archive map stored at path,
-// transparently decompressing when the file is a ZIP (magic PK\x03\x04). The
-// upstream artifact is a ZIP of a single text file; a plain-text file is read
-// as-is so a future uncompressed publish still works. The caller must Close the
-// returned reader, which owns any underlying zip handle.
+// transparently decompressing when the file is a ZIP. The upstream artifact is a
+// ZIP of a single text file; a plain-text file is read as-is so a future
+// uncompressed publish still works. Every ZIP record begins "PK" (a populated
+// archive with PK\x03\x04, a valid-but-empty one with PK\x05\x06), so any
+// PK-prefixed file is routed to the zip reader - which surfaces an empty archive
+// as an error instead of a silently empty map. The map's first column is always
+// an accession, never "PK", so plain text is unambiguous. The caller must Close
+// the returned reader, which owns any underlying zip handle.
 func openMap(path string) (io.ReadCloser, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
-	magic := make([]byte, 4)
+	magic := make([]byte, 2)
 	n, _ := io.ReadFull(f, magic)
 	f.Close()
-	if n == 4 && bytes.Equal(magic, []byte("PK\x03\x04")) {
+	if n == 2 && bytes.Equal(magic, []byte("PK")) {
 		return openZipMap(path)
 	}
 	return os.Open(path)
