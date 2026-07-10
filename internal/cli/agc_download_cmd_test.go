@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,6 +13,22 @@ import (
 	"github.com/allthebacteria/atb-cli/internal/osf"
 	"github.com/allthebacteria/atb-cli/internal/sources"
 )
+
+// writeBatchIndex writes a local AGC batch index TSV covering the named batches
+// (each on a collection node) and returns its path, so accession-mode tests can
+// resolve batch -> index URL through the bridge without any network I/O.
+func writeBatchIndex(t *testing.T, batches ...string) string {
+	t.Helper()
+	tsv := "project\tproject_id\tfilename\turl\tmd5\tsize_mb\n"
+	for _, name := range batches {
+		tsv += name + "\t6g8by\t" + name + ".agc\thttps://osf.io/download/" + name + "/\tmd5" + name + "\t1.000000\n"
+	}
+	path := filepath.Join(t.TempDir(), "idx.tsv")
+	if err := os.WriteFile(path, []byte(tsv), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
 
 // seedArchiveMap writes a cached archive map under <dataDir>/agc so the command
 // resolves accessions with no network I/O.
@@ -39,16 +56,16 @@ func TestAGCDownloadHelpListsFlags(t *testing.T) {
 }
 
 // TestAGCDownloadHelpAgcIndexDefault guards that the --agc-index help text
-// reflects the current default: loadAGCIndex downloads the published OSF index
-// first and only crawls as a fallback, so the help must advertise the published
-// index and must not claim the old crawl-only default.
+// reflects the current default: both modes share the batch index, which by
+// default crawls the full OSF collection. The help must mention the collection
+// and must not claim the old crawl-only single-node default.
 func TestAGCDownloadHelpAgcIndexDefault(t *testing.T) {
 	stdout, _, err := runCmd("agc", "download", "--help")
 	if err != nil {
 		t.Fatalf("agc download --help: %v", err)
 	}
-	if !strings.Contains(stdout, "published index") {
-		t.Errorf("expected --agc-index help to mention the published-index default, got:\n%s", stdout)
+	if !strings.Contains(strings.ToLower(stdout), "collection") {
+		t.Errorf("expected --agc-index help to mention the collection-crawl default, got:\n%s", stdout)
 	}
 	if strings.Contains(stdout, "crawl the OSF node and cache it") {
 		t.Errorf("stale --agc-index help still claims a crawl-only default:\n%s", stdout)
@@ -228,8 +245,9 @@ func TestAGCDownloadDryRun(t *testing.T) {
 	// Install a fake agc so FindBinary passes.
 	withFakeAGC(t, "#!/bin/sh\nexit 0\n")
 	seedArchiveMap(t, dir, "ACC1 batch_a\nACC2 batch_a\n")
+	idxPath := writeBatchIndex(t, "batch_a")
 
-	stdout, stderr, err := runCmd("agc", "download", "--data-dir", dir, "--dry-run", "ACC1", "ACC2")
+	stdout, stderr, err := runCmd("agc", "download", "--data-dir", dir, "--agc-index", idxPath, "--dry-run", "ACC1", "ACC2")
 	if err != nil {
 		t.Fatalf("dry-run failed: %v\nstderr: %s", err, stderr)
 	}
@@ -253,8 +271,9 @@ func TestAGCDownloadUnresolvedWarns(t *testing.T) {
 	dir := t.TempDir()
 	withFakeAGC(t, "#!/bin/sh\nexit 0\n")
 	seedArchiveMap(t, dir, "ACC1 batch_a\n")
+	idxPath := writeBatchIndex(t, "batch_a")
 
-	_, stderr, err := runCmd("agc", "download", "--data-dir", dir, "--dry-run", "ACC1", "GHOST")
+	_, stderr, err := runCmd("agc", "download", "--data-dir", dir, "--agc-index", idxPath, "--dry-run", "ACC1", "GHOST")
 	if err == nil {
 		t.Fatal("expected non-zero exit when an accession is unresolved")
 	}
@@ -286,8 +305,9 @@ func TestAGCDownloadDryRunMultipleArchives(t *testing.T) {
 	dir := t.TempDir()
 	withFakeAGC(t, "#!/bin/sh\nexit 0\n")
 	seedArchiveMap(t, dir, "ACC1 batch_a\nACC2 batch_b\nACC3 batch_a\n")
+	idxPath := writeBatchIndex(t, "batch_a", "batch_b")
 
-	stdout, stderr, err := runCmd("agc", "download", "--data-dir", dir, "--dry-run", "ACC1", "ACC2", "ACC3")
+	stdout, stderr, err := runCmd("agc", "download", "--data-dir", dir, "--agc-index", idxPath, "--dry-run", "ACC1", "ACC2", "ACC3")
 	if err != nil {
 		t.Fatalf("dry-run failed: %v\nstderr: %s", err, stderr)
 	}
@@ -315,6 +335,7 @@ func TestAGCDownloadDedupesArgsAndFile(t *testing.T) {
 	dir := t.TempDir()
 	withFakeAGC(t, "#!/bin/sh\nexit 0\n")
 	seedArchiveMap(t, dir, "ACC1 batch_a\nACC2 batch_a\n")
+	idxPath := writeBatchIndex(t, "batch_a")
 
 	from := filepath.Join(t.TempDir(), "more.txt")
 	if err := os.WriteFile(from, []byte("ACC2\nACC3\n"), 0o644); err != nil {
@@ -322,7 +343,7 @@ func TestAGCDownloadDedupesArgsAndFile(t *testing.T) {
 	}
 	// args [ACC1 ACC2] + --from [ACC2 ACC3]: ACC2 is duplicated and must
 	// collapse to one sample; ACC3 is unresolved and must warn + exit non-zero.
-	_, stderr, err := runCmd("agc", "download", "--data-dir", dir, "--dry-run", "ACC1", "ACC2", "--from", from)
+	_, stderr, err := runCmd("agc", "download", "--data-dir", dir, "--agc-index", idxPath, "--dry-run", "ACC1", "ACC2", "--from", from)
 	if err == nil {
 		t.Fatal("expected non-zero exit for unresolved ACC3")
 	}
@@ -401,5 +422,69 @@ func TestLoadAGCBatchIndexExplicitNodeUsesHosted(t *testing.T) {
 	}
 	if len(idx.Entries) != 3 || hits != 1 {
 		t.Fatalf("explicit node should download hosted TSV once: entries=%d hits=%d", len(idx.Entries), hits)
+	}
+}
+
+func TestAGCDownloadAccessionNotYetAvailable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake agc stub requires a POSIX shell")
+	}
+	dir := t.TempDir()
+	withFakeAGC(t, "#!/bin/sh\nexit 0\n")
+	// The map knows the batch, but the index (via --agc-index) does not list it.
+	seedArchiveMap(t, dir, "ACC1 Ghost_global_ordered_9999\n")
+	idxPath := writeAGCIndex(t) // A. baylyi / S. suis rows only, no Ghost batch
+
+	_, stderr, err := runCmd("agc", "download", "--data-dir", dir,
+		"--agc-index", idxPath, "--dry-run", "ACC1")
+	if err == nil {
+		t.Fatal("expected non-zero exit when the batch is not yet available")
+	}
+	if !strings.Contains(strings.ToLower(stderr), "not yet available") {
+		t.Errorf("expected a 'not yet available' warning, got:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, "Ghost_global_ordered_9999") {
+		t.Errorf("warning should name the batch, got:\n%s", stderr)
+	}
+}
+
+func TestAGCDownloadAccessionOverOSF(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake agc stub requires a POSIX shell")
+	}
+	// Serve the .agc archive from a fake OSF; the index ref points at it.
+	var served int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		served++
+		io.WriteString(w, "fake-agc-bytes")
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	withFakeAGC(t, "#!/bin/sh\nexit 0\n")
+	seedArchiveMap(t, dir, "ACC1 Escherichia_coli_global_ordered_0001\n")
+	// A local batch index whose single row's URL is the fake server (md5 empty
+	// skips verification). This is the bridge: accession -> batch -> index URL.
+	idxTSV := "project\tproject_id\tfilename\turl\tmd5\tsize_mb\n" +
+		"Escherichia_coli\t6g8by\tEscherichia_coli_global_ordered_0001.agc\t" + srv.URL + "/arch\t\t1.000000\n"
+	idxPath := filepath.Join(t.TempDir(), "idx.tsv")
+	if err := os.WriteFile(idxPath, []byte(idxTSV), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(dir, "out")
+
+	_, stderr, err := runCmd("agc", "download", "--data-dir", dir,
+		"--agc-index", idxPath, "-o", out, "ACC1")
+	if err != nil {
+		t.Fatalf("download over OSF failed: %v\nstderr: %s", err, stderr)
+	}
+	if served == 0 {
+		t.Error("the archive was not downloaded from the index URL (bridge not wired)")
+	}
+	if !strings.Contains(stderr, "Completed: 1") {
+		t.Errorf("want Completed: 1, got:\n%s", stderr)
+	}
+	if _, err := os.Stat(filepath.Join(out, "ACC1.fa")); err != nil {
+		t.Errorf("per-sample FASTA not written: %v", err)
 	}
 }

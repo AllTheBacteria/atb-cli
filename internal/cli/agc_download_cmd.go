@@ -34,19 +34,20 @@ func newAGCDownloadCmd() *cobra.Command {
 		Short: "Download genome FASTA from AGC archives by accession or species",
 		Long: `Download assembled-genome FASTA from AGC archives, two ways.
 
-By accession (the default): accessions resolve to AGC archives via a cached
-sample->archive map; the needed .agc archives are downloaded (cache-first) to
-<data-dir>/agc, then each sample is extracted with the agc binary. Accessions
+By accession (the default): each accession is mapped to its AGC batch via a
+cached sample->archive map, and that batch is located in the AGC batch index to
+obtain its download URL; the needed .agc archives are downloaded (cache-first)
+to <data-dir>/agc, then each sample is extracted with the agc binary. Accessions
 come from positional arguments, a --from file (a query result with a
 sample_accession column, or one accession per line; - for stdin), or piped
-stdin.
+stdin. Batches named by the map but not yet listed in the index are reported as
+"not yet available" while the collection is still being published.
 
 By species (--species "Escherichia coli"): every batch named
-<Species>_global_ordered_* is downloaded and extracted whole — no sample->archive
-map needed. Batches are resolved from a separate AGC index (atb_agc_files.tsv),
-either downloaded from the OSF node (its published index by default, a live
-crawl as fallback) and cached, or read from a local --agc-index file. This is
-the bulk "give me all of species X" path.
+<Species>_global_ordered_* is downloaded and extracted whole, with no
+sample->archive map needed. Both modes share the AGC batch index, which by
+default is crawled from the full OSF collection and cached (or read from a local
+--agc-index file). This is the bulk "give me all of species X" path.
 
 Run 'atb agc install' once to install the agc binary. By default each sample is
 written to <output-dir>/<accession>.fa; use --combine to stream everything to one
@@ -174,7 +175,7 @@ file (or stdout).`,
 				return run(groups, byName, 0)
 			}
 
-			// Mode B — by accession (default).
+			// Mode B - by accession (default).
 			accessions := append([]string{}, args...)
 			if fromFile != "" {
 				fromAcc, err := readAccessionsFromFile(fromFile)
@@ -197,15 +198,31 @@ file (or stdout).`,
 				return fmt.Errorf("no accessions given; pass them as arguments, via --from <file>, pipe them to stdin, or use --species for a whole-species fetch")
 			}
 
+			nodeOverride := firstNonEmpty(osfNode, cfg.AGC.OSFNode)
+			idx, err := loadAGCBatchIndex(agcIndex, sources.AGCIndexURL, archiveDirResolved, nodeOverride, refresh)
+			if err != nil {
+				return err
+			}
+			byName := agc.RefsFromIndex(idx)
+
 			groups, unresolved, err := agc.ResolveArchives(dataDir, cfg.AGC.ArchiveMapURL, accessions, refresh)
 			if err != nil {
 				return err
 			}
+			refs, missing := agc.RefsForGroups(groups, byName)
 			for _, u := range unresolved {
 				fmt.Fprintf(errOut, "warning: %s: %s\n", u.Accession, u.Reason)
 			}
-			if !keepGoing && len(unresolved) > 0 {
-				return fmt.Errorf("%d accession(s) not found in the archive map", len(unresolved))
+			notYet := 0
+			for _, m := range missing {
+				n := len(groups[m])
+				notYet += n
+				fmt.Fprintf(errOut, "warning: batch %s not yet available (%d sample(s)); the collection is still being published\n", m, n)
+				delete(groups, m)
+			}
+			if !keepGoing && (len(unresolved) > 0 || len(missing) > 0) {
+				return fmt.Errorf("%d accession(s) not retrievable (%d unresolved, %d in unavailable batches)",
+					len(unresolved)+notYet, len(unresolved), notYet)
 			}
 
 			if dryRun {
@@ -213,13 +230,16 @@ file (or stdout).`,
 				for archive, accs := range groups {
 					fmt.Fprintf(errOut, "  %s.agc  (%d sample(s))\n", archive, len(accs))
 				}
-				if n := len(unresolved); n > 0 {
-					return fmt.Errorf("%d accession(s) unresolved", n)
+				for _, m := range missing {
+					fmt.Fprintf(errOut, "  %s.agc  (not yet available)\n", m)
+				}
+				if len(unresolved) > 0 || len(missing) > 0 {
+					return fmt.Errorf("%d accession(s) unresolved, %d in unavailable batch(es)", len(unresolved), notYet)
 				}
 				return nil
 			}
 
-			return run(groups, nil, len(unresolved))
+			return run(groups, refs, len(unresolved)+notYet)
 		},
 	}
 
@@ -227,8 +247,8 @@ file (or stdout).`,
 	cmd.Flags().StringVarP(&outputDir, "output-dir", "o", "", "per-sample output directory; with --combine, the single output file (default stdout)")
 	cmd.Flags().StringVar(&archiveDir, "archive-dir", "", "directory to cache .agc archives (default <data-dir>/agc)")
 	cmd.Flags().StringVar(&species, "species", "", "fetch every batch of this species (whole-batch mode; no accession map needed)")
-	cmd.Flags().StringVar(&osfNode, "osf-node", "", "OSF node to crawl for the by-species index (default from config or the staging node)")
-	cmd.Flags().StringVar(&agcIndex, "agc-index", "", "local AGC index TSV for --species (default: download the published OSF index, else crawl)")
+	cmd.Flags().StringVar(&osfNode, "osf-node", "", "OSF node override for the batch index (default: crawl the full collection)")
+	cmd.Flags().StringVar(&agcIndex, "agc-index", "", "local AGC batch index TSV; the default crawls the full OSF collection (or the published index with --osf-node)")
 	cmd.Flags().IntVarP(&threads, "threads", "t", 0, "agc threads (default: all cores minus one)")
 	cmd.Flags().IntVar(&lineLength, "line-length", 0, "FASTA line wrap length (default: agc's 80)")
 	cmd.Flags().IntVar(&gzipLevel, "gzip", 0, "gzip output at this level (0 = uncompressed)")
