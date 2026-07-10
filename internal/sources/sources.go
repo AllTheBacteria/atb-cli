@@ -113,12 +113,14 @@ const AGCRepo = "refresh-bio/agc"
 // Reference prototype: https://github.com/tam-km-truong/atb_agc_extract
 // Override at runtime via config keys agc.archive_map_url / agc.archive_base_url.
 
-// AGCArchiveMapURL is the whitespace-delimited sample->archive map (~90 MB):
-// column 1 is the sample accession, column 2 is the archive name (no .agc).
-const AGCArchiveMapURL = "https://data-access.cesgo.org/index.php/s/9WuPWJL25cYYZml/download"
+// AGCArchiveMapURL is the accession->batch list for the full v202505 collection,
+// published on OSF as a ZIP of a ~148 MB two-column text file (accession, batch
+// name without .agc). atb caches the ZIP as downloaded and decompresses on read.
+const AGCArchiveMapURL = "https://osf.io/download/2xjt8/"
 
-// AGCArchiveMapFilename is the local cache filename for the archive map.
-const AGCArchiveMapFilename = "agc_file_list.txt"
+// AGCArchiveMapFilename is the local cache filename for the archive map. It keeps
+// the .zip extension because the artifact is cached exactly as downloaded.
+const AGCArchiveMapFilename = "agc_file_list.txt.zip"
 
 // AGCArchiveBaseURL is the prefix for downloading a single .agc archive;
 // ArchiveURL appends "<archive>.agc".
@@ -168,6 +170,45 @@ const AGCIndexURL = "https://osf.io/download/6a477a94899134067adf99c9/"
 // entry point for crawling its folders.
 func OSFNodeFilesURL(nodeID string) string {
 	return OSFAPIBase + "/nodes/" + nodeID + "/files/osfstorage/"
+}
+
+// ---------------------------------------------------------------------------
+// AGC full collection over OSF (v202505, PREVIEW)
+// ---------------------------------------------------------------------------
+// The full ATB v202505 AGC collection (2.76M genomes) is hosted across three
+// public OSF nodes, each under an agc_archives/ folder. The batch index is the
+// concatenation of all three nodes' listings. Like the z7q5y test batches these
+// are NOT registered in the master index; atb builds a combined index by
+// crawling the OSF API. Kept isolated so the collection can be promoted or a
+// future combined hosted TSV dropped in without touching production paths.
+
+// AGCNode identifies one OSF node in the collection together with the
+// human-facing "part" label shown in `atb agc locate` output.
+type AGCNode struct {
+	ID   string
+	Part string
+}
+
+// AGCCollectionNodes are the OSF nodes that together host the full collection.
+var AGCCollectionNodes = []AGCNode{
+	{ID: "6g8by", Part: "major"},
+	{ID: "9fqeh", Part: "unknown"},
+	{ID: "xrzub", Part: "dustbin"},
+}
+
+// AGCArchivesFolder is the folder holding .agc batches on the collection nodes.
+// The legacy z7q5y test node uses AGCBatchesFolder instead.
+const AGCArchivesFolder = "agc_archives"
+
+// PartForNode returns the collection-part label for a node id, or "" when the id
+// is not a collection node (e.g. the legacy z7q5y test node).
+func PartForNode(nodeID string) string {
+	for _, n := range AGCCollectionNodes {
+		if n.ID == nodeID {
+			return n.Part
+		}
+	}
+	return ""
 }
 
 // ---------------------------------------------------------------------------
