@@ -29,6 +29,7 @@ Uses the upstream 'agc' binary. Run 'atb agc install' to download it
 	cmd.AddCommand(newAGCDownloadCmd())
 	cmd.AddCommand(newAGCInstallCmd())
 	cmd.AddCommand(newAGCIndexCmd())
+	cmd.AddCommand(newAGCLocateCmd())
 	cmd.AddCommand(newAGCListCmd())
 	cmd.AddCommand(newAGCInfoCmd())
 	cmd.AddCommand(newAGCGetCmd())
