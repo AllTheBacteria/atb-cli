@@ -13,12 +13,22 @@ All notable changes to `atb-cli` are documented here. Format follows [Keep a Cha
   (`contig[@sample][:from-to]`), by `--sample`, or the whole collection with
   `--all`. Output streams to stdout or a file (`-o`), with optional gzip
   (`--gzip`) and line wrapping (`-l`).
-- `atb agc download --species <name>` fetches assembled genomes from
-  AllTheBacteria's OSF storage: it resolves the per-species `.agc` batches from
-  a hosted index (cache-first, md5-verified) and extracts whole-batch FASTA via
-  `agc getcol`. `atb agc index` builds or refreshes that index. This by-species
-  path is a **preview** — it currently resolves batches from a staging OSF node
-  and is under active development, so archive locations and the index may change.
+- `atb agc download` fetches assembled genomes from AllTheBacteria's OSF
+  storage. `--species <name>` resolves and extracts every `.agc` batch for a
+  species; given sample accessions instead (positional, a `--from` file, or
+  piped stdin) it resolves each accession to the batch that holds it and
+  downloads only those batches, so you extract just the samples of interest.
+  Batches resolve from a cache-first, md5-verified index that by default
+  crawls the full v202505 collection across its OSF nodes; `--osf-node <id>`
+  targets a single node's published index and `--agc-index <file>` uses a
+  local TSV. `atb agc index` builds or refreshes the by-species index. This
+  AGC path is a **preview** under active development, so archive locations and
+  the index may change.
+- `atb agc locate [accession...]` is the search half of `atb agc download`: it
+  resolves sample accessions to the AGC batch (and OSF collection part) that
+  holds them without downloading anything, reading the same map and index.
+  Accessions come from arguments, a `--from` file, or piped stdin; output is
+  TSV or `--format json`.
 
 ## [v0.17.1](https://github.com/allthebacteria/atb-cli/releases/tag/v0.17.1) - 2026-06-04
 
