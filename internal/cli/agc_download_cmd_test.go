@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/allthebacteria/atb-cli/internal/osf"
 	"github.com/allthebacteria/atb-cli/internal/sources"
 )
 
@@ -331,5 +332,74 @@ func TestAGCDownloadDedupesArgsAndFile(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "ACC3") {
 		t.Errorf("expected ACC3 unresolved warning, got:\n%s", stderr)
+	}
+}
+
+// agcCollectionTSV is a 6-column batch index whose rows sit on collection nodes
+// (project_id = a collection node id), so PartForNode yields a real part.
+const agcCollectionTSV = "project\tproject_id\tfilename\turl\tmd5\tsize_mb\n" +
+	"Escherichia_coli\t6g8by\tEscherichia_coli_global_ordered_0001.agc\thttps://osf.io/download/ec1/\tmd5ec\t1.000000\n" +
+	"Salmonella_enterica\txrzub\tSalmonella_enterica_global_ordered_0072.agc\thttps://osf.io/download/se72/\tmd5se\t2.000000\n"
+
+// seedAGCCollectionIndex writes a warm collection-index cache under <dataDir>/agc
+// so loadAGCBatchIndex's default (no --osf-node) path is a cache hit with no
+// network I/O. The .source sidecar must match the node set's marker.
+func seedAGCCollectionIndex(t *testing.T, dataDir, tsv string) {
+	t.Helper()
+	cacheDir := filepath.Join(dataDir, sources.AGCArchiveSubdir)
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cached := filepath.Join(cacheDir, sources.AGCIndexFilename)
+	if err := os.WriteFile(cached, []byte(tsv), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	marker := osf.CollectionCacheSource(sources.AGCCollectionNodes)
+	// ".source" mirrors osf's internal cache sidecar suffix.
+	if err := os.WriteFile(cached+".source", []byte(marker+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLoadAGCBatchIndexDefaultUsesCollectionCache(t *testing.T) {
+	dir := t.TempDir()
+	cacheDir := filepath.Join(dir, sources.AGCArchiveSubdir)
+	seedAGCCollectionIndex(t, dir, agcCollectionTSV)
+	// No --osf-node override and no local path: must serve the seeded collection
+	// cache with zero network I/O (a real crawl would hit api.osf.io).
+	idx, err := loadAGCBatchIndex("", sources.AGCIndexURL, cacheDir, "", false)
+	if err != nil {
+		t.Fatalf("loadAGCBatchIndex (default): %v", err)
+	}
+	if len(idx.Entries) != 2 {
+		t.Fatalf("got %d entries, want 2 from the seeded collection cache", len(idx.Entries))
+	}
+}
+
+func TestLoadAGCBatchIndexLocalPathWins(t *testing.T) {
+	local := writeAGCIndex(t) // existing helper: 3-row TSV
+	idx, err := loadAGCBatchIndex(local, sources.AGCIndexURL, t.TempDir(), "", false)
+	if err != nil {
+		t.Fatalf("loadAGCBatchIndex (local): %v", err)
+	}
+	if len(idx.Entries) != 3 {
+		t.Fatalf("local path: got %d, want 3", len(idx.Entries))
+	}
+}
+
+func TestLoadAGCBatchIndexExplicitNodeUsesHosted(t *testing.T) {
+	var hits int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		w.Write([]byte(agcIndexTSV))
+	}))
+	defer server.Close()
+	// Explicit --osf-node = the default test node, with a hosted URL: hosted path.
+	idx, err := loadAGCBatchIndex("", server.URL, t.TempDir(), sources.AGCTestNodeID, false)
+	if err != nil {
+		t.Fatalf("loadAGCBatchIndex (explicit node): %v", err)
+	}
+	if len(idx.Entries) != 3 || hits != 1 {
+		t.Fatalf("explicit node should download hosted TSV once: entries=%d hits=%d", len(idx.Entries), hits)
 	}
 }

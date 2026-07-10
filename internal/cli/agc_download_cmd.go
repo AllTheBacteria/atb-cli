@@ -150,8 +150,8 @@ file (or stdout).`,
 				if len(args) > 0 || fromFile != "" {
 					return fmt.Errorf("--species fetches whole batches by species and cannot be combined with accession arguments or --from")
 				}
-				node := resolveOSFNode(osfNode, cfg.AGC.OSFNode)
-				idx, err := loadAGCIndex(agcIndex, sources.AGCIndexURL, archiveDirResolved, node, refresh)
+				nodeOverride := firstNonEmpty(osfNode, cfg.AGC.OSFNode)
+				idx, err := loadAGCBatchIndex(agcIndex, sources.AGCIndexURL, archiveDirResolved, nodeOverride, refresh)
 				if err != nil {
 					return err
 				}
@@ -251,6 +251,27 @@ file (or stdout).`,
 // crawl that node instead of reusing the default node's published snapshot.
 func useHostedAGCIndex(localPath, indexURL, node string) bool {
 	return localPath == "" && indexURL != "" && node == sources.AGCTestNodeID
+}
+
+// loadAGCBatchIndex returns the batch index both download modes search. With no
+// explicit --agc-index and no explicit --osf-node override it crawls the full
+// collection (the three AGCCollectionNodes' agc_archives/ folders) and caches the
+// merged TSV. A local --agc-index path always wins. An explicit --osf-node (flag
+// or config) selects the legacy single-node path: the hosted published TSV for
+// the default test node, or a live agc_batches/ crawl for any other node.
+func loadAGCBatchIndex(localPath, indexURL, cacheDir, nodeOverride string, refresh bool) (*osf.Index, error) {
+	if localPath != "" {
+		f, err := os.Open(localPath)
+		if err != nil {
+			return nil, fmt.Errorf("open --agc-index: %w", err)
+		}
+		defer f.Close()
+		return osf.ParseIndex(f)
+	}
+	if nodeOverride == "" {
+		return osf.FetchAGCCollection(cacheDir, sources.OSFNodeFilesURL, sources.AGCCollectionNodes, refresh)
+	}
+	return loadAGCIndex("", indexURL, cacheDir, nodeOverride, refresh)
 }
 
 // loadAGCIndex returns the by-species AGC index for Mode A. A non-empty
