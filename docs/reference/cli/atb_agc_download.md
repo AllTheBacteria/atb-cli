@@ -6,19 +6,20 @@ Download genome FASTA from AGC archives by accession or species
 
 Download assembled-genome FASTA from AGC archives, two ways.
 
-By accession (the default): accessions resolve to AGC archives via a cached
-sample->archive map; the needed .agc archives are downloaded (cache-first) to
-<data-dir>/agc, then each sample is extracted with the agc binary. Accessions
+By accession (the default): each accession is mapped to its AGC batch via a
+cached sample->archive map, and that batch is located in the AGC batch index to
+obtain its download URL; the needed .agc archives are downloaded (cache-first)
+to <data-dir>/agc, then each sample is extracted with the agc binary. Accessions
 come from positional arguments, a --from file (a query result with a
 sample_accession column, or one accession per line; - for stdin), or piped
-stdin.
+stdin. Batches named by the map but not yet listed in the index are reported as
+"not yet available" while the collection is still being published.
 
 By species (--species "Escherichia coli"): every batch named
-<Species>_global_ordered_* is downloaded and extracted whole — no sample->archive
-map needed. Batches are resolved from a separate AGC index (atb_agc_files.tsv),
-either downloaded from the OSF node (its published index by default, a live
-crawl as fallback) and cached, or read from a local --agc-index file. This is
-the bulk "give me all of species X" path.
+<Species>_global_ordered_* is downloaded and extracted whole, with no
+sample->archive map needed. Both modes share the AGC batch index, which by
+default is crawled from the full OSF collection and cached (or read from a local
+--agc-index file). This is the bulk "give me all of species X" path.
 
 Run 'atb agc install' once to install the agc binary. By default each sample is
 written to <output-dir>/<accession>.fa; use --combine to stream everything to one
@@ -51,7 +52,7 @@ atb agc download [accession...] [flags]
 ### Options
 
 ```
-      --agc-index string     local AGC index TSV for --species (default: download the published OSF index, else crawl)
+      --agc-index string     local AGC batch index TSV; the default crawls the full OSF collection (or the published index with --osf-node)
       --archive-dir string   directory to cache .agc archives (default <data-dir>/agc)
       --combine              write all samples to one stream/file instead of per-sample files
       --dry-run              resolve and list archives without downloading or extracting

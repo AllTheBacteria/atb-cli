@@ -5,6 +5,7 @@
         * [index](atb_agc_index.md)
         * [info](atb_agc_info.md)
         * [install](atb_agc_install.md)
+        * [locate](atb_agc_locate.md)
         * [ls](atb_agc_ls.md)
     * [amr](atb_amr.md)
     * [config](atb_config.md)

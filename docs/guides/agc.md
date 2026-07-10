@@ -42,13 +42,14 @@ atb agc download --species "Mycoplasmoides pneumoniae" \
 atb agc download --species "Salmonella enterica" --dry-run
 ```
 
-The first by-species run fetches the index (`atb_agc_files.tsv`) and caches it for
-7 days. By default `atb` downloads the pre-built index published on the OSF node
-instead of crawling it page by page; if that published file is unavailable (or you
-target a non-default node) it falls back to a live crawl of the node's
-`agc_batches/` folder. The cache records which source produced it, so a release
-that points at a freshly published index refreshes your local copy automatically.
-Use `--refresh` to force a re-fetch of the index and re-download archives.
+The first by-species run builds the batch index (`atb_agc_files.tsv`) and caches it
+for 7 days. By default `atb` crawls the full ATB v202505 collection across its OSF
+nodes and combines their listings into one index. Pass `--osf-node <id>` to target a
+single node instead, which uses that node's pre-built published index (falling back
+to a live crawl when the published file is unavailable). The cache records which
+source produced it, so a release that repoints the index refreshes your local copy
+automatically. Use `--refresh` to force a re-fetch of the index and re-download
+archives.
 
 !!! tip "Offline or pinned index"
     Pass a local index TSV with `--agc-index` to skip the network fetch entirely - useful for reproducible runs or air-gapped environments. Generate the file once with [`atb agc index`](#build-the-by-species-index):
@@ -61,8 +62,11 @@ Use `--refresh` to force a re-fetch of the index and re-download archives.
 ## Fetch genomes by accession
 
 The default mode. Accessions resolve to AGC archives through a cached
-sample→archive map; the needed archives are downloaded and each sample is
-extracted by name. Accessions come from arguments, a `--from` file, or stdin.
+sample→archive map; those archives are then found in the same OSF collection index
+that `--species` uses - so `--agc-index` and `--osf-node` apply here too - then
+downloaded and each sample extracted by name. Accessions come from arguments, a
+`--from` file, or stdin. A sample whose batch is named but not yet published is
+reported as not yet available (the collection is still being uploaded).
 
 ```bash
 # One sample to the default per-sample output directory
@@ -98,9 +102,37 @@ Useful flags (both modes):
 | `-t`, `--threads N` | agc extraction threads (default: cores − 1) |
 | `-p`, `--parallel N` | Parallel archive downloads |
 | `--archive-dir DIR` | Where to cache `.agc` archives (default `<data-dir>/agc`) |
+| `--agc-index FILE` | Use a local batch index TSV instead of crawling the collection |
+| `--osf-node ID` | Resolve batches against one OSF node's index, not the full collection |
 | `--refresh` | Re-download the index/map and archives even if cached |
 | `--dry-run` | Resolve and list archives without downloading or extracting |
 | `--keep-going` | Continue past unresolved or failed samples (on by default); still exits non-zero if any |
+
+## Locate a sample's batch (preview)
+
+`atb agc locate` answers "which AGC batch holds my sample, and is it available
+yet?" without downloading anything. It is the search half of `atb agc download`:
+the same accession→batch map and batch index, printed instead of fetched. No agc
+binary is required.
+
+```bash
+# One accession
+atb agc locate SAMEA2247573
+
+# A whole query result, as JSON for a pipeline
+atb query --species "Escherichia coli" --limit 5 --format tsv | \
+  atb agc locate --from - --format json
+```
+
+The TSV output has three columns - `accession`, `batch`, `part` - where `part` is
+the collection tier (`major`, `unknown`, or `dustbin`). JSON output adds the
+resolved OSF `url`. An accession absent from the map prints `<unresolved>`; a sample
+whose batch is named but not yet published prints `<not-yet-available>`.
+
+!!! note "Preview"
+    The full v202505 collection (2.76M genomes across three OSF nodes) is still being
+    published. A `<not-yet-available>` result means the batch exists in the map but its
+    node has not finished uploading - try again later.
 
 ## Build the by-species index
 
