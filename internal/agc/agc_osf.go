@@ -1,6 +1,7 @@
 package agc
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/allthebacteria/atb-cli/internal/osf"
@@ -16,6 +17,7 @@ type ArchiveRef struct {
 	URL    string
 	MD5    string
 	SizeMB float64
+	Node   string // OSF node id (osf.Entry.ProjectID); "" for non-collection sources
 }
 
 // archiveStem strips the ".agc" extension from a batch filename, yielding the
@@ -31,6 +33,7 @@ func refFromEntry(e osf.Entry) ArchiveRef {
 		URL:    e.URL,
 		MD5:    e.MD5,
 		SizeMB: e.SizeMB,
+		Node:   e.ProjectID,
 	}
 }
 
@@ -44,6 +47,27 @@ func RefsFromIndex(idx *osf.Index) map[string]ArchiveRef {
 		refs[ref.Name] = ref
 	}
 	return refs
+}
+
+// RefsForGroups splits a ResolveArchives result against the batch index. For
+// every archive in groups it looks up the index refs (byName, from
+// RefsFromIndex): archives found are returned in refs (which feeds
+// FetchSpec.Refs exactly as species-mode does); archives absent from the index -
+// a batch named by the map but not yet crawlable, e.g. a collection node still
+// uploading - are returned, sorted, in missing, so the caller can report them as
+// "not yet available" distinctly from an unknown accession. refs is always
+// non-nil.
+func RefsForGroups(groups map[string][]string, byName map[string]ArchiveRef) (refs map[string]ArchiveRef, missing []string) {
+	refs = make(map[string]ArchiveRef, len(groups))
+	for archive := range groups {
+		if ref, ok := byName[archive]; ok {
+			refs[archive] = ref
+		} else {
+			missing = append(missing, archive)
+		}
+	}
+	sort.Strings(missing)
+	return refs, missing
 }
 
 // WholeArchiveGroups turns a by-species selection into the two maps the fetch

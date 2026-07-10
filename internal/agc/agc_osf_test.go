@@ -133,3 +133,37 @@ func TestSelectBySpecies(t *testing.T) {
 		t.Errorf("unknown species: got %d, want 0", n)
 	}
 }
+
+func TestRefsFromIndexPopulatesNode(t *testing.T) {
+	idx := &osf.Index{Entries: []osf.Entry{
+		{Project: "Escherichia_coli", ProjectID: "6g8by",
+			Filename: "Escherichia_coli_global_ordered_0001.agc",
+			URL:      "https://osf.io/download/ec1/", MD5: "md5ec", SizeMB: 1.0},
+	}}
+	refs := RefsFromIndex(idx)
+	r, ok := refs["Escherichia_coli_global_ordered_0001"]
+	if !ok {
+		t.Fatal("ref missing")
+	}
+	if r.Node != "6g8by" {
+		t.Errorf("Node = %q, want the entry's ProjectID 6g8by", r.Node)
+	}
+}
+
+func TestRefsForGroups(t *testing.T) {
+	byName := RefsFromIndex(sampleAGCIndex())
+	groups := map[string][]string{
+		"Acinetobacter_baylyi_global_ordered_0001": {"ACC1"},         // in the index
+		"Ghost_global_ordered_9999":                {"ACC2", "ACC3"}, // absent
+	}
+	refs, missing := RefsForGroups(groups, byName)
+	if _, ok := refs["Acinetobacter_baylyi_global_ordered_0001"]; !ok {
+		t.Errorf("present archive should be in refs: %v", refs)
+	}
+	if _, ok := refs["Ghost_global_ordered_9999"]; ok {
+		t.Errorf("absent archive must not be in refs")
+	}
+	if len(missing) != 1 || missing[0] != "Ghost_global_ordered_9999" {
+		t.Errorf("missing = %v, want [Ghost_global_ordered_9999]", missing)
+	}
+}
