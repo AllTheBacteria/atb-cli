@@ -2,40 +2,32 @@ package agc
 
 import (
 	"testing"
-
-	"github.com/allthebacteria/atb-cli/internal/osf"
 )
 
-func TestLocate(t *testing.T) {
-	idx := &osf.Index{Entries: []osf.Entry{
-		{Project: "Escherichia_coli", ProjectID: "6g8by",
-			Filename: "Escherichia_coli_global_ordered_0001.agc",
-			URL:      "https://osf.io/download/ec1/", MD5: "md5ec", SizeMB: 1.0},
-	}}
-	byName := RefsFromIndex(idx)
+func TestLocateReportsSpeciesAndNode(t *testing.T) {
 	m := ArchiveMap{
-		"ACC_FOUND":  "Escherichia_coli_global_ordered_0001",
-		"ACC_NOTYET": "Ghost_global_ordered_9999", // in map, not in index
+		"SAMEA1": "atb.assembly.202505_all.batch.0001", // found
+		"SAMEA2": "atb.assembly.202505_all.batch.0999", // maps, batch not in index
 	}
-	partFor := func(node string) string {
-		if node == "6g8by" {
-			return "major"
-		}
-		return ""
+	byName := map[string]ArchiveRef{
+		"atb.assembly.202505_all.batch.0001": {
+			Name:    "atb.assembly.202505_all.batch.0001",
+			URL:     "https://osf.io/download/aaa/",
+			Node:    "4jq8u",
+			Species: "Escherichia_coli",
+		},
 	}
-	// Input order preserved: found, not-yet, unresolved.
-	got := Locate([]string{"ACC_FOUND", "ACC_NOTYET", "ACC_MISSING"}, m, byName, partFor)
+	got := Locate([]string{"SAMEA1", "SAMEA2", "SAMEA3"}, m, byName)
 	if len(got) != 3 {
-		t.Fatalf("got %d results, want 3", len(got))
+		t.Fatalf("len: got %d, want 3", len(got))
 	}
-	if got[0].Status != LocateFound || got[0].Batch != "Escherichia_coli_global_ordered_0001" ||
-		got[0].Part != "major" || got[0].URL != "https://osf.io/download/ec1/" {
-		t.Errorf("found row wrong: %+v", got[0])
+	if got[0].Status != LocateFound || got[0].Species != "Escherichia_coli" || got[0].Node != "4jq8u" {
+		t.Errorf("row0: got %+v, want found E. coli on 4jq8u", got[0])
 	}
-	if got[1].Status != LocateNotYetAvailable || got[1].Batch != "Ghost_global_ordered_9999" {
-		t.Errorf("not-yet row wrong: %+v", got[1])
+	if got[1].Status != LocateNotYetAvailable || got[1].Batch != "atb.assembly.202505_all.batch.0999" {
+		t.Errorf("row1: got %+v, want not-yet-available", got[1])
 	}
-	if got[2].Status != LocateUnresolved || got[2].Batch != "" {
-		t.Errorf("unresolved row wrong: %+v", got[2])
+	if got[2].Status != LocateUnresolved {
+		t.Errorf("row2: got %+v, want unresolved", got[2])
 	}
 }
