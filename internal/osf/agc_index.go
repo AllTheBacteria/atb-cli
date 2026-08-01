@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -97,9 +98,25 @@ func parseAGCNodePage(r io.Reader) ([]Entry, string, error) {
 	return entries, page.Links.Next, nil
 }
 
-// crawlMaxPages caps pagination so a malformed "next" cycle cannot loop
-// forever; 767 batches at <=100/page is 8 pages, so this is generous.
+// crawlMaxPages caps pagination so a malformed "next" cycle cannot loop forever.
+// The crawl requests sort=name&page[size]=100, so 1268 batches is about 13 pages;
+// the 10000 cap is a generous loop guard.
 const crawlMaxPages = 10000
+
+// withStableSort returns rawURL with OSF's stable total-order params applied, so
+// page-number pagination cannot overlap or gap. OSF echoes these params in each
+// page's "next" link, so stamping the start URL covers the whole walk.
+func withStableSort(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+	q := u.Query()
+	q.Set("sort", "name")
+	q.Set("page[size]", "100")
+	u.RawQuery = q.Encode()
+	return u.String()
+}
 
 // CrawlAGCNode walks an OSF folder listing starting at startURL, following the
 // "next" link until exhausted, and returns an Index of every .agc file found.
@@ -109,7 +126,7 @@ func CrawlAGCNode(client *http.Client, startURL, nodeID string) (*Index, error) 
 		client = &http.Client{Timeout: 60 * time.Second}
 	}
 	idx := &Index{}
-	url := startURL
+	url := withStableSort(startURL)
 	for pages := 0; url != "" && pages < crawlMaxPages; pages++ {
 		resp, err := client.Get(url)
 		if err != nil {
@@ -150,31 +167,55 @@ func WriteAGCIndexTSV(idx *Index, w io.Writer) error {
 	return bw.Flush()
 }
 
-// findFolderURL fetches an OSF node's root listing and returns the contents
-// listing URL (the "related" link) of the named subfolder. OSF does not let you
-// address a folder by name directly, so the root must be listed to discover the
-// opaque per-folder endpoint.
-func findFolderURL(client *http.Client, rootURL, folderName string) (string, error) {
-	resp, err := client.Get(rootURL)
-	if err != nil {
-		return "", fmt.Errorf("list OSF node root: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("list OSF node root: HTTP %d", resp.StatusCode)
-	}
-	var page osfAPIPage
-	if err := json.NewDecoder(resp.Body).Decode(&page); err != nil {
-		return "", fmt.Errorf("decode OSF node root: %w", err)
-	}
-	for _, it := range page.Data {
-		if it.Attributes.Kind == "folder" && it.Attributes.Name == folderName {
-			href := it.Relationships.Files.Links.Related.Href
-			if href == "" {
-				return "", fmt.Errorf("folder %q has no contents link", folderName)
-			}
-			return href, nil
+// FirstDuplicateBatch returns the first (project_id, filename) pair that appears
+// more than once in idx, or "", false when every batch is distinct. A duplicate
+// is never legitimate: it means the crawl saw the same batch twice, so the
+// publish path uses this to fail closed rather than ship a silently corrupt index.
+func FirstDuplicateBatch(idx *Index) (string, bool) {
+	seen := make(map[string]bool, len(idx.Entries))
+	for _, e := range idx.Entries {
+		key := e.ProjectID + "\t" + e.Filename
+		if seen[key] {
+			return e.ProjectID + "/" + e.Filename, true
 		}
+		seen[key] = true
+	}
+	return "", false
+}
+
+// findFolderURL walks an OSF node's root listing (requesting the stable total
+// order) and returns the contents listing URL (the "related" link) of the named
+// subfolder. OSF does not let you address a folder by name directly, so the root
+// must be listed to discover the opaque per-folder endpoint. The folder can fall
+// on any page, so the walk follows "next" until the folder is found or the pages
+// run out.
+func findFolderURL(client *http.Client, rootURL, folderName string) (string, error) {
+	url := withStableSort(rootURL)
+	for pages := 0; url != "" && pages < crawlMaxPages; pages++ {
+		resp, err := client.Get(url)
+		if err != nil {
+			return "", fmt.Errorf("list OSF node root: %w", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			return "", fmt.Errorf("list OSF node root: HTTP %d", resp.StatusCode)
+		}
+		var page osfAPIPage
+		err = json.NewDecoder(resp.Body).Decode(&page)
+		resp.Body.Close()
+		if err != nil {
+			return "", fmt.Errorf("decode OSF node root: %w", err)
+		}
+		for _, it := range page.Data {
+			if it.Attributes.Kind == "folder" && it.Attributes.Name == folderName {
+				href := it.Relationships.Files.Links.Related.Href
+				if href == "" {
+					return "", fmt.Errorf("folder %q has no contents link", folderName)
+				}
+				return href, nil
+			}
+		}
+		url = page.Links.Next
 	}
 	return "", fmt.Errorf("folder %q: %w", folderName, ErrFolderNotFound)
 }

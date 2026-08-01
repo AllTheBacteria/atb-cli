@@ -115,6 +115,51 @@ func TestWriteAGCIndexKeepsOutputOnFailClose(t *testing.T) {
 	}
 }
 
+func TestWriteAGCIndexFailsClosedOnDuplicateBatch(t *testing.T) {
+	// One node's agc_batches listing returns the same batch filename twice - the
+	// symptom of inconsistent OSF pagination. The batch has metadata, so it clears
+	// the unmatched check and is caught only by the duplicate guard. The publish
+	// path must fail closed and write no file.
+	folder := sources.AGCArchivesFolder
+	fileItem := func(name string) string {
+		return `{"attributes":{"name":"` + name + `","kind":"file","size":1000000,` +
+			`"extra":{"hashes":{"md5":"abc"}}},"links":{"download":"https://osf.io/download/` + name + `/"}}`
+	}
+	folderItem := func(nodeHost string) string {
+		return `{"attributes":{"name":"` + folder + `","kind":"folder"},` +
+			`"relationships":{"files":{"links":{"related":{"href":"` + nodeHost + `/folder/"}}}}}`
+	}
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/nodeA/root/":
+			fmt.Fprintf(w, `{"data":[%s],"links":{"next":null}}`, folderItem(srv.URL+"/nodeA"))
+		case "/nodeA/folder/":
+			// The same batch is listed twice.
+			fmt.Fprintf(w, `{"data":[%s,%s],"links":{"next":null}}`,
+				fileItem("atb.assembly.202505_all.batch.0001.agc"),
+				fileItem("atb.assembly.202505_all.batch.0001.agc"))
+		case "/metadata":
+			w.Write(gzipTSV(t, "batch_name\told_name\n"+
+				"atb.assembly.202505_all.batch.0001\tEscherichia_coli_global_ordered.part001\n"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	rootURLFor := func(nodeID string) string { return srv.URL + "/" + nodeID + "/root/" }
+	nodes := []sources.AGCNode{{ID: "nodeA"}}
+
+	out := filepath.Join(t.TempDir(), "atb_agc_files.tsv")
+	if _, err := writeAGCIndexOutput(out, io.Discard, rootURLFor, nodes, srv.URL+"/metadata"); err == nil {
+		t.Fatalf("expected fail-closed error on a duplicate batch")
+	}
+	if _, err := os.Stat(out); !os.IsNotExist(err) {
+		t.Errorf("output file must not be created on a duplicate batch; os.Stat err = %v", err)
+	}
+}
+
 func TestRunAGCIndexWritesJoinedTSV(t *testing.T) {
 	// A fully-matched sibling of buildJoinServer: every crawled batch is present
 	// in the metadata, so the join leaves nothing unmatched and the index writes.

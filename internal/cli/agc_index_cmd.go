@@ -26,6 +26,9 @@ func runAGCIndex(w io.Writer, rootURLFor func(nodeID string) string, nodes []sou
 	if len(missing) > 0 {
 		return 0, len(missing), fmt.Errorf("%d batch(es) have no species in the metadata (first: %s); not writing a partial index", len(missing), missing[0])
 	}
+	if dup, ok := osf.FirstDuplicateBatch(idx); ok {
+		return 0, 0, fmt.Errorf("crawl returned duplicate batch %q; the OSF listing may be paginating inconsistently", dup)
+	}
 	if err := osf.WriteAGCIndexTSV(idx, w); err != nil {
 		return 0, 0, err
 	}

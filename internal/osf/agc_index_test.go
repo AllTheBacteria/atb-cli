@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -96,6 +97,99 @@ func TestCrawlAGCNode(t *testing.T) {
 	last := idx.Entries[len(idx.Entries)-1]
 	if last.Filename != "subthreshold_remainder_global_ordered_0091.agc" {
 		t.Errorf("last entry = %q, want the page-2 subthreshold batch", last.Filename)
+	}
+}
+
+func TestCrawlAGCNodeRequestsStableOrder(t *testing.T) {
+	// The crawl must page through OSF's stable total order (sort=name,
+	// page[size]=100) so page-number pagination cannot gap or overlap. The handler
+	// serves 25 distinct files across 3 pages and asserts every request - including
+	// the ones reached via "next" - carries the stable-order params.
+	const total = 25
+	const perPage = 10
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("sort"); got != "name" {
+			t.Errorf("request %q: sort = %q, want \"name\"", r.URL.RequestURI(), got)
+		}
+		if got := r.URL.Query().Get("page[size]"); got != "100" {
+			t.Errorf("request %q: page[size] = %q, want \"100\"", r.URL.RequestURI(), got)
+		}
+		page := 1
+		if p := r.URL.Query().Get("page"); p != "" {
+			page, _ = strconv.Atoi(p)
+		}
+		start := (page-1)*perPage + 1
+		end := start + perPage - 1
+		if end > total {
+			end = total
+		}
+		items := make([]string, 0, perPage)
+		for n := start; n <= end; n++ {
+			name := fmt.Sprintf("atb.assembly.202505_all.batch.%04d.agc", n)
+			items = append(items, fmt.Sprintf(
+				`{"attributes":{"name":%q,"kind":"file","size":1000000,`+
+					`"extra":{"hashes":{"md5":"abc"}}},"links":{"download":"https://osf.io/download/%d/"}}`,
+				name, n))
+		}
+		next := "null"
+		if end < total {
+			next = `"` + server.URL + "/folder?sort=name&page%5Bsize%5D=100&page=" +
+				strconv.Itoa(page+1) + `"`
+		}
+		fmt.Fprintf(w, `{"data":[%s],"links":{"next":%s}}`, strings.Join(items, ","), next)
+	}))
+	defer server.Close()
+
+	idx, err := CrawlAGCNode(server.Client(), server.URL+"/folder", "4jq8u")
+	if err != nil {
+		t.Fatalf("CrawlAGCNode: %v", err)
+	}
+	if len(idx.Entries) != total {
+		t.Fatalf("got %d entries across pages, want %d", len(idx.Entries), total)
+	}
+	seen := make(map[string]bool, total)
+	for _, e := range idx.Entries {
+		if seen[e.Filename] {
+			t.Errorf("filename %q returned more than once", e.Filename)
+		}
+		seen[e.Filename] = true
+	}
+	if len(seen) != total {
+		t.Errorf("distinct filenames = %d, want %d", len(seen), total)
+	}
+}
+
+func TestFindFolderURLFollowsPagination(t *testing.T) {
+	// The target folder can appear on any page of the node root listing, so
+	// findFolderURL must follow "next" across pages instead of reading only page 1.
+	folderItem := func(name, href string) string {
+		return `{"attributes":{"name":"` + name + `","kind":"folder"},` +
+			`"relationships":{"files":{"links":{"related":{"href":"` + href + `"}}}}}`
+	}
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/root":
+			// Page 1 holds an unrelated folder and points "next" at page 2.
+			fmt.Fprintf(w, `{"data":[%s],"links":{"next":%q}}`,
+				folderItem("some_other_folder", server.URL+"/other/"), server.URL+"/root2")
+		case "/root2":
+			// Page 2 holds the target folder.
+			fmt.Fprintf(w, `{"data":[%s],"links":{"next":null}}`,
+				folderItem(sources.AGCArchivesFolder, server.URL+"/folder/"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	href, err := findFolderURL(server.Client(), server.URL+"/root", sources.AGCArchivesFolder)
+	if err != nil {
+		t.Fatalf("findFolderURL must follow pagination to a later page, got error: %v", err)
+	}
+	if want := server.URL + "/folder/"; href != want {
+		t.Errorf("href = %q, want %q", href, want)
 	}
 }
 
@@ -289,6 +383,33 @@ func TestWriteAGCIndexTSVRoundTrip(t *testing.T) {
 			!approxEq(g.SizeMB, want.SizeMB) {
 			t.Errorf("round-trip entry %d = %+v, want %+v", i, g, want)
 		}
+	}
+}
+
+func TestFirstDuplicateBatch(t *testing.T) {
+	// A repeated (project_id, filename) is never legitimate: it means the crawl saw
+	// the same batch twice. FirstDuplicateBatch reports the first such key.
+	dup := &Index{Entries: []Entry{
+		{ProjectID: "4jq8u", Filename: "atb.assembly.202505_all.batch.0001.agc"},
+		{ProjectID: "jmeqg", Filename: "atb.assembly.202505_all.batch.0002.agc"},
+		{ProjectID: "4jq8u", Filename: "atb.assembly.202505_all.batch.0001.agc"},
+	}}
+	key, ok := FirstDuplicateBatch(dup)
+	if !ok {
+		t.Errorf("ok = false, want true on a repeated (project_id, filename)")
+	}
+	if want := "4jq8u/atb.assembly.202505_all.batch.0001.agc"; key != want {
+		t.Errorf("key = %q, want %q", key, want)
+	}
+
+	// The same filename under a different node is a distinct batch, not a duplicate.
+	distinct := &Index{Entries: []Entry{
+		{ProjectID: "4jq8u", Filename: "atb.assembly.202505_all.batch.0001.agc"},
+		{ProjectID: "jmeqg", Filename: "atb.assembly.202505_all.batch.0001.agc"},
+		{ProjectID: "4jq8u", Filename: "atb.assembly.202505_all.batch.0002.agc"},
+	}}
+	if key, ok := FirstDuplicateBatch(distinct); ok {
+		t.Errorf("all-distinct index: got (%q, true), want (\"\", false)", key)
 	}
 }
 
