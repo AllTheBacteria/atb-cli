@@ -30,7 +30,7 @@ func gzipTSV(t *testing.T, s string) []byte {
 	return buf.Bytes()
 }
 
-// buildJoinServer serves two collection nodes (root listing + agc_archives folder
+// buildJoinServer serves two collection nodes (root listing + agc_batches folder
 // contents) plus a gzipped metadata endpoint, all off one httptest server. Node
 // A holds batch.0001 (metadata match) and batch.0999 (no metadata, so unmatched);
 // node B holds batch.0002. Copied verbatim from the osf test package.

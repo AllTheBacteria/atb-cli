@@ -104,14 +104,12 @@ const AGCVersion = "v3.2.3"
 const AGCRepo = "refresh-bio/agc"
 
 // ---------------------------------------------------------------------------
-// AGC genome archives (PROVISIONAL)
+// AGC genome archives
 // ---------------------------------------------------------------------------
-// AllTheBacteria is moving its genome batches from miniphy .tar.xz to AGC
-// archives. The host below is the prototype's CESGO endpoint; OSF is still
-// under discussion. These are intentionally isolated here so switching hosts
-// (or to OSF's per-file /download/<id>/ shape) is a one-line change.
-// Reference prototype: https://github.com/tam-km-truong/atb_agc_extract
-// Override at runtime via config keys agc.archive_map_url / agc.archive_base_url.
+// AllTheBacteria distributes its genome batches as AGC archives hosted on OSF.
+// The accession-to-batch map and the local cache layout are isolated here so a
+// host change is a one-line edit. Override at runtime via config keys
+// agc.archive_map_url / agc.archive_base_url.
 
 // AGCArchiveMapURL is the accession->batch list for the balanced v202505
 // collection, published on OSF as a gzipped two-column text file
@@ -128,15 +126,13 @@ const AGCArchiveMapFilename = "assemblies_filelist.txt.gz"
 const AGCArchiveSubdir = "agc"
 
 // ---------------------------------------------------------------------------
-// AGC genome archives over OSF (TEST DATA — node z7q5y)
+// AGC index over OSF
 // ---------------------------------------------------------------------------
-// The AGC batches are staged on the OSF "ATB testing" node z7q5y under the
-// agc_batches/ folder. Unlike the master index, these batches are NOT
-// registered in all_atb_files.tsv. While the data is under test, atb builds a
-// SEPARATE index TSV by crawling the OSF API — each batch carries its own
-// opaque /download/<guid>/ URL, md5, and size. Keeping this isolated from the
-// master index lets the test data be promoted (or discarded) without touching
-// production paths. See docs/design/agc-osf-test-implementation.md.
+// The AGC batches are not registered in the master all_atb_files.tsv, so atb
+// builds a SEPARATE index TSV: each batch carries its own opaque
+// /download/<guid>/ URL, md5, and size. atb reads the published combined index
+// when it is available (AGCIndexURL) and crawls the collection nodes to rebuild
+// it otherwise. The collection layout is defined below.
 
 // OSFAPIBase is the root of the OSF REST API (v2).
 const OSFAPIBase = "https://api.osf.io/v2"

@@ -21,7 +21,7 @@ func writeBatchIndex(t *testing.T, batches ...string) string {
 	t.Helper()
 	tsv := "project\tproject_id\tfilename\turl\tmd5\tsize_mb\n"
 	for _, name := range batches {
-		tsv += name + "\t6g8by\t" + name + ".agc\thttps://osf.io/download/" + name + "/\tmd5" + name + "\t1.000000\n"
+		tsv += name + "\tjmeqg\t" + name + ".agc\thttps://osf.io/download/" + name + "/\tmd5" + name + "\t1.000000\n"
 	}
 	path := filepath.Join(t.TempDir(), "idx.tsv")
 	if err := os.WriteFile(path, []byte(tsv), 0o644); err != nil {
@@ -85,9 +85,9 @@ func TestTopLevelFetchGenomesRemoved(t *testing.T) {
 // reuses the master-index columns so osf.ParseIndex round-trips it. Tests feed it
 // via --agc-index to exercise Mode A without any network I/O.
 const agcIndexTSV = "project\tproject_id\tfilename\turl\tmd5\tsize_mb\n" +
-	"Acinetobacter_baylyi\tz7q5y\tAcinetobacter_baylyi_global_ordered_0001.agc\thttps://osf.io/download/aaa/\tmd5aaa\t3.890000\n" +
-	"Acinetobacter_baylyi\tz7q5y\tAcinetobacter_baylyi_global_ordered_0002.agc\thttps://osf.io/download/bbb/\tmd5bbb\t4.100000\n" +
-	"Streptococcus_suis_AA\tz7q5y\tStreptococcus_suis_AA_global_ordered_0001.agc\thttps://osf.io/download/ccc/\tmd5ccc\t10.400000\n"
+	"Acinetobacter_baylyi\t4jq8u\tAcinetobacter_baylyi_global_ordered_0001.agc\thttps://osf.io/download/aaa/\tmd5aaa\t3.890000\n" +
+	"Acinetobacter_baylyi\t4jq8u\tAcinetobacter_baylyi_global_ordered_0002.agc\thttps://osf.io/download/bbb/\tmd5bbb\t4.100000\n" +
+	"Streptococcus_suis_AA\t4jq8u\tStreptococcus_suis_AA_global_ordered_0001.agc\thttps://osf.io/download/ccc/\tmd5ccc\t10.400000\n"
 
 func writeAGCIndex(t *testing.T) string {
 	t.Helper()
@@ -294,15 +294,15 @@ func TestAGCDownloadDedupesArgsAndFile(t *testing.T) {
 	}
 }
 
-// agcCollectionTSV is a 6-column batch index whose rows sit on collection nodes
-// (project_id = a collection node id), so PartForNode yields a real part.
+// agcCollectionTSV is a 6-column collection-index TSV whose project_id column
+// holds a collection node id; it is shared by the download and locate tests.
 const agcCollectionTSV = "project\tproject_id\tfilename\turl\tmd5\tsize_mb\n" +
-	"Escherichia_coli\t6g8by\tEscherichia_coli_global_ordered_0001.agc\thttps://osf.io/download/ec1/\tmd5ec\t1.000000\n" +
-	"Salmonella_enterica\txrzub\tSalmonella_enterica_global_ordered_0072.agc\thttps://osf.io/download/se72/\tmd5se\t2.000000\n"
+	"Escherichia_coli\tjmeqg\tEscherichia_coli_global_ordered_0001.agc\thttps://osf.io/download/ec1/\tmd5ec\t1.000000\n" +
+	"Salmonella_enterica\tkzcnr\tSalmonella_enterica_global_ordered_0072.agc\thttps://osf.io/download/se72/\tmd5se\t2.000000\n"
 
 // seedAGCCollectionIndex writes a warm collection-index cache under <dataDir>/agc
-// so loadAGCBatchIndex's default (no --osf-node) path is a cache hit with no
-// network I/O. The .source sidecar must match the node set's marker.
+// so loadAGCBatchIndex's default path is a cache hit with no network I/O. The
+// .source sidecar must match the node set's marker.
 func seedAGCCollectionIndex(t *testing.T, dataDir, tsv string) {
 	t.Helper()
 	cacheDir := filepath.Join(dataDir, sources.AGCArchiveSubdir)
@@ -387,7 +387,7 @@ func TestAGCDownloadAccessionOverOSF(t *testing.T) {
 	// A local batch index whose single row's URL is the fake server (md5 empty
 	// skips verification). This is the bridge: accession -> batch -> index URL.
 	idxTSV := "project\tproject_id\tfilename\turl\tmd5\tsize_mb\n" +
-		"Escherichia_coli\t6g8by\tEscherichia_coli_global_ordered_0001.agc\t" + srv.URL + "/arch\t\t1.000000\n"
+		"Escherichia_coli\tjmeqg\tEscherichia_coli_global_ordered_0001.agc\t" + srv.URL + "/arch\t\t1.000000\n"
 	idxPath := filepath.Join(t.TempDir(), "idx.tsv")
 	if err := os.WriteFile(idxPath, []byte(idxTSV), 0o644); err != nil {
 		t.Fatal(err)

@@ -126,9 +126,9 @@ func CrawlAGCNode(client *http.Client, startURL, nodeID string) (*Index, error) 
 		client = &http.Client{Timeout: 60 * time.Second}
 	}
 	idx := &Index{}
-	url := withStableSort(startURL)
-	for pages := 0; url != "" && pages < crawlMaxPages; pages++ {
-		resp, err := client.Get(url)
+	pageURL := withStableSort(startURL)
+	for pages := 0; pageURL != "" && pages < crawlMaxPages; pages++ {
+		resp, err := client.Get(pageURL)
 		if err != nil {
 			return nil, fmt.Errorf("crawl OSF node: %w", err)
 		}
@@ -145,7 +145,7 @@ func CrawlAGCNode(client *http.Client, startURL, nodeID string) (*Index, error) 
 			entries[i].ProjectID = nodeID
 		}
 		idx.Entries = append(idx.Entries, entries...)
-		url = next
+		pageURL = next
 	}
 	return idx, nil
 }
@@ -190,9 +190,9 @@ func FirstDuplicateBatch(idx *Index) (string, bool) {
 // on any page, so the walk follows "next" until the folder is found or the pages
 // run out.
 func findFolderURL(client *http.Client, rootURL, folderName string) (string, error) {
-	url := withStableSort(rootURL)
-	for pages := 0; url != "" && pages < crawlMaxPages; pages++ {
-		resp, err := client.Get(url)
+	pageURL := withStableSort(rootURL)
+	for pages := 0; pageURL != "" && pages < crawlMaxPages; pages++ {
+		resp, err := client.Get(pageURL)
 		if err != nil {
 			return "", fmt.Errorf("list OSF node root: %w", err)
 		}
@@ -215,7 +215,7 @@ func findFolderURL(client *http.Client, rootURL, folderName string) (string, err
 				return href, nil
 			}
 		}
-		url = page.Links.Next
+		pageURL = page.Links.Next
 	}
 	return "", fmt.Errorf("folder %q: %w", folderName, ErrFolderNotFound)
 }

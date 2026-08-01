@@ -58,7 +58,7 @@ func TestParseAGCNodePage(t *testing.T) {
 		t.Errorf("entries[1].Project = %q, want empty (species comes from the join)", entries[1].Project)
 	}
 
-	wantNext := "https://api.osf.io/v2/nodes/z7q5y/files/osfstorage/6a35c88e71b808fa8816675d/?page=2"
+	wantNext := "https://api.osf.io/v2/nodes/4jq8u/files/osfstorage/6a35c88e71b808fa8816675d/?page=2"
 	if next != wantNext {
 		t.Errorf("next = %q, want %q", next, wantNext)
 	}
@@ -74,7 +74,7 @@ func TestCrawlAGCNode(t *testing.T) {
 			raw, _ := os.ReadFile("testdata/agc_node_page1.json")
 			// Point page 1's "next" at this test server's page 2.
 			body = []byte(strings.Replace(string(raw),
-				"https://api.osf.io/v2/nodes/z7q5y/files/osfstorage/6a35c88e71b808fa8816675d/?page=2",
+				"https://api.osf.io/v2/nodes/4jq8u/files/osfstorage/6a35c88e71b808fa8816675d/?page=2",
 				server.URL+"/p2", 1))
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -82,7 +82,7 @@ func TestCrawlAGCNode(t *testing.T) {
 	}))
 	defer server.Close()
 
-	idx, err := CrawlAGCNode(server.Client(), server.URL, "z7q5y")
+	idx, err := CrawlAGCNode(server.Client(), server.URL, "4jq8u")
 	if err != nil {
 		t.Fatalf("CrawlAGCNode: %v", err)
 	}
@@ -90,8 +90,8 @@ func TestCrawlAGCNode(t *testing.T) {
 		t.Fatalf("got %d entries across 2 pages, want 3", len(idx.Entries))
 	}
 	for _, e := range idx.Entries {
-		if e.ProjectID != "z7q5y" {
-			t.Errorf("ProjectID = %q, want node id z7q5y", e.ProjectID)
+		if e.ProjectID != "4jq8u" {
+			t.Errorf("ProjectID = %q, want node id 4jq8u", e.ProjectID)
 		}
 	}
 	last := idx.Entries[len(idx.Entries)-1]
@@ -195,8 +195,8 @@ func TestFindFolderURLFollowsPagination(t *testing.T) {
 
 func TestFetchAGCIndexFromURL(t *testing.T) {
 	const tsv = "project\tproject_id\tfilename\turl\tmd5\tsize_mb\n" +
-		"Acinetobacter_baylyi\tz7q5y\tAcinetobacter_baylyi_global_ordered_0001.agc\thttps://osf.io/download/aaa/\t7be632ec46828a45a4d6d01d77b8099d\t3.890981\n" +
-		"Salmonella_enterica\tz7q5y\tSalmonella_enterica_global_ordered_0072.agc\thttps://osf.io/download/bbb/\t1650ac20b0da23db315b0c31dc04b8a1\t34.606133\n"
+		"Acinetobacter_baylyi\t4jq8u\tAcinetobacter_baylyi_global_ordered_0001.agc\thttps://osf.io/download/aaa/\t7be632ec46828a45a4d6d01d77b8099d\t3.890981\n" +
+		"Salmonella_enterica\t4jq8u\tSalmonella_enterica_global_ordered_0072.agc\thttps://osf.io/download/bbb/\t1650ac20b0da23db315b0c31dc04b8a1\t34.606133\n"
 
 	var hits int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -255,10 +255,10 @@ func TestFetchAGCIndexFromURL(t *testing.T) {
 
 func TestFetchAGCIndexFromURLInvalidatesOnURLChange(t *testing.T) {
 	const tsvA = "project\tproject_id\tfilename\turl\tmd5\tsize_mb\n" +
-		"Acinetobacter_baylyi\tz7q5y\tAcinetobacter_baylyi_global_ordered_0001.agc\thttps://osf.io/download/aaa/\t7be632ec46828a45a4d6d01d77b8099d\t3.890981\n" +
-		"Salmonella_enterica\tz7q5y\tSalmonella_enterica_global_ordered_0072.agc\thttps://osf.io/download/bbb/\t1650ac20b0da23db315b0c31dc04b8a1\t34.606133\n"
+		"Acinetobacter_baylyi\t4jq8u\tAcinetobacter_baylyi_global_ordered_0001.agc\thttps://osf.io/download/aaa/\t7be632ec46828a45a4d6d01d77b8099d\t3.890981\n" +
+		"Salmonella_enterica\t4jq8u\tSalmonella_enterica_global_ordered_0072.agc\thttps://osf.io/download/bbb/\t1650ac20b0da23db315b0c31dc04b8a1\t34.606133\n"
 	const tsvB = "project\tproject_id\tfilename\turl\tmd5\tsize_mb\n" +
-		"Mycoplasmoides_pneumoniae\tz7q5y\tMycoplasmoides_pneumoniae_global_ordered_0001.agc\thttps://osf.io/download/ccc/\tabc123abc123abc123abc123abc12345\t0.981234\n"
+		"Mycoplasmoides_pneumoniae\t4jq8u\tMycoplasmoides_pneumoniae_global_ordered_0001.agc\thttps://osf.io/download/ccc/\tabc123abc123abc123abc123abc12345\t0.981234\n"
 
 	var hitsA, hitsB int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -317,7 +317,7 @@ func TestFetchAGCIndexFromURLInvalidatesOnURLChange(t *testing.T) {
 
 func TestFetchAGCIndexFromURLMissingSidecarRefetches(t *testing.T) {
 	const tsv = "project\tproject_id\tfilename\turl\tmd5\tsize_mb\n" +
-		"Acinetobacter_baylyi\tz7q5y\tAcinetobacter_baylyi_global_ordered_0001.agc\thttps://osf.io/download/aaa/\t7be632ec46828a45a4d6d01d77b8099d\t3.890981\n"
+		"Acinetobacter_baylyi\t4jq8u\tAcinetobacter_baylyi_global_ordered_0001.agc\thttps://osf.io/download/aaa/\t7be632ec46828a45a4d6d01d77b8099d\t3.890981\n"
 
 	var hits int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -356,10 +356,10 @@ func TestFetchAGCIndexFromURLMissingSidecarRefetches(t *testing.T) {
 
 func TestWriteAGCIndexTSVRoundTrip(t *testing.T) {
 	idx := &Index{Entries: []Entry{
-		{Project: "Acinetobacter_baylyi", ProjectID: "z7q5y",
+		{Project: "Acinetobacter_baylyi", ProjectID: "4jq8u",
 			Filename: "Acinetobacter_baylyi_global_ordered_0001.agc",
 			URL:      "https://osf.io/download/abc/", MD5: "7be632ec46828a45a4d6d01d77b8099d", SizeMB: 3.890981},
-		{Project: "subthreshold_remainder", ProjectID: "z7q5y",
+		{Project: "subthreshold_remainder", ProjectID: "4jq8u",
 			Filename: "subthreshold_remainder_global_ordered_0091.agc",
 			URL:      "https://osf.io/download/def/", MD5: "eee2fcce08c28ce4ef6f0199ea69a04f", SizeMB: 114.899074},
 	}}
@@ -493,7 +493,7 @@ func TestCrawlAGCCollectionSkipsMissingFolder(t *testing.T) {
 		}
 	}))
 	defer good.Close()
-	// This node's root has no agc_archives folder yet (still provisioning).
+	// This node's root has no agc_batches folder yet (still provisioning).
 	empty := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, `{"data":[],"links":{"next":null}}`)
 	}))

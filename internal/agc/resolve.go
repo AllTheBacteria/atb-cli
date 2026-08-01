@@ -145,7 +145,7 @@ func (g *gzipReadCloser) Close() error {
 // mapURL falls back to sources.AGCArchiveMapURL. The body is streamed to a
 // temp file and renamed into place so a partial download never poisons the
 // cache; the file is large. The cached artifact is stored exactly as downloaded
-// (a ZIP) and openMap decompresses it on read.
+// (a gzip) and openMap decompresses it on read.
 func FetchMap(cacheDir, mapURL string, force bool) (ArchiveMap, error) {
 	if mapURL == "" {
 		mapURL = sources.AGCArchiveMapURL

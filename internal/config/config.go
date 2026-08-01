@@ -38,8 +38,10 @@ type DownloadConfig struct {
 	MinFreeSpaceGB int    `toml:"min_free_space_gb"`
 }
 
-// AGCConfig holds overrides for AGC genome-archive retrieval. Empty values mean
-// "use the provisional defaults in internal/sources".
+// AGCConfig holds overrides for AGC genome-archive retrieval. An empty
+// ArchiveMapURL or ArchiveDir falls back to the default in internal/sources; an
+// empty ArchiveBaseURL means downloads resolve through the published index
+// rather than a synthesized base URL.
 type AGCConfig struct {
 	ArchiveMapURL  string `toml:"archive_map_url"`
 	ArchiveBaseURL string `toml:"archive_base_url"`

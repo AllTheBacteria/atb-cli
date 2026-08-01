@@ -1,17 +1,17 @@
 # Fetching genomes from AGC archives
 
-AllTheBacteria assemblies are distributed as **AGC** (Assembled Genome Compressor) archives — each `.agc` batch holds many genomes with cross-genome delta compression, so a ~1 MB archive can expand to hundreds of MB of FASTA. The `atb agc` command group works with these archives:
+AllTheBacteria assemblies are distributed as **AGC** (Assembled Genome Compressor) archives - each `.agc` batch holds many genomes with cross-genome delta compression, so a ~1 MB archive can expand to hundreds of MB of FASTA. The `atb agc` command group works with these archives:
 
-- **`atb agc download`** — the subcommand most people want. It finds the right archive(s) for you, downloads them (cache-first, MD5-verified), and extracts FASTA. Works **by accession** or **by species**.
-- **`atb agc ls` / `info` / `get`** — low-level tools for `.agc` files you already have on disk (list, inspect, extract).
-- **`atb agc index`** — build a searchable index of the OSF-hosted archives (what `--species` searches).
-- **`atb agc install`** — fetch the upstream `agc` binary the others shell out to.
+- **`atb agc download`** - the subcommand most people want. It finds the right archive(s) for you, downloads them (cache-first, MD5-verified), and extracts FASTA. Works **by accession** or **by species**.
+- **`atb agc ls` / `info` / `get`** - low-level tools for `.agc` files you already have on disk (list, inspect, extract).
+- **`atb agc index`** - build a searchable index of the OSF-hosted archives (what `--species` searches).
+- **`atb agc install`** - fetch the upstream `agc` binary the others shell out to.
 
 !!! info "Availability"
     The `atb agc` command group is new in **v0.18.0**; it is not in v0.17.x. The 0.18.0 line is currently in beta while the by-species workflow settles, so install it from the [v0.18.0-beta.2 pre-release](https://github.com/AllTheBacteria/atb-cli/releases/tag/v0.18.0-beta.2) (newer betas appear on the [releases page](https://github.com/AllTheBacteria/atb-cli/releases)). The installer's default stays on the latest stable until 0.18.0 is released.
 
 !!! note "Which command do I want?"
-    Reach for **`atb agc download`** to get genomes by sample accession or by species — it handles resolution, download, and extraction. Drop down to **`atb agc ls`/`info`/`get`** only when you already have a local `.agc` file, or to **`atb agc index`** when you want to (re)generate the by-species index. All shell out to the upstream `agc` binary, so install it first.
+    Reach for **`atb agc download`** to get genomes by sample accession or by species - it handles resolution, download, and extraction. Drop down to **`atb agc ls`/`info`/`get`** only when you already have a local `.agc` file, or to **`atb agc index`** when you want to (re)generate the by-species index. All shell out to the upstream `agc` binary, so install it first.
 
 ## Install the agc binary
 
@@ -25,7 +25,7 @@ It is installed alongside the `atb` binary. Re-running is a no-op if `agc` is al
 
 ## Fetch genomes by species
 
-Download **every** batch of a species and extract it whole — no accession list needed. Batches are matched against the index's species column: `atb agc index` joins each numbered batch (`atb.assembly.202505_all.batch.NNNN.agc`, which carries no species itself) with its species from the batch metadata when the index is built.
+Download **every** batch of a species and extract it whole - no accession list needed. Batches are matched against the index's species column: `atb agc index` joins each numbered batch (`atb.assembly.202505_all.batch.NNNN.agc`, which carries no species itself) with its species from the batch metadata when the index is built.
 
 ```bash
 # Every Acinetobacter baylyi batch, combined into one FASTA
@@ -135,7 +135,7 @@ with `<not-yet-available>` for species and node.
 `atb agc index` crawls the `agc_batches/` folder on each of the three OSF nodes
 that host the ATB v202505 collection (`4jq8u`, `jmeqg`, `kzcnr`; 1,268 numbered
 batches in total) and joins every batch with its species from the batch
-metadata, writing a **separate** index TSV — one row per `.agc` batch with its
+metadata, writing a **separate** index TSV - one row per `.agc` batch with its
 species, OSF download URL, MD5, and size. This is the file
 `atb agc download --species` searches. Generate it once and commit it for
 offline use, or let `atb agc download` crawl and cache it on demand.
@@ -149,13 +149,13 @@ atb agc index
 ```
 
 The index is a 6-column TSV (`project`, `project_id`, `filename`, `url`, `md5`,
-`size_mb`) — the same layout as the master OSF index, so the standard parser
+`size_mb`) - the same layout as the master OSF index, so the standard parser
 round-trips it.
 
 ## Inspect and extract local archives
 
 When you already have a `.agc` file on disk, use the low-level `atb agc`
-subcommands directly — no download, no index.
+subcommands directly - no download, no index.
 
 ```bash
 # List the sample names in an archive
@@ -188,7 +188,7 @@ atb agc get genomes.agc --all --gzip 6 -t 8 -o all.fa.gz
 
 ## Related pages
 
-- [Querying genomes](query.md) — find accessions to feed into `atb agc download`
-- [Downloading genomes](download.md) — the parquet/FASTA download path
-- [Fetching & indexing data](fetch-and-index.md) — set up the data directory
-- [Configuration](configuration.md) — set defaults like the output directory
+- [Querying genomes](query.md) - find accessions to feed into `atb agc download`
+- [Downloading genomes](download.md) - the parquet/FASTA download path
+- [Fetching & indexing data](fetch-and-index.md) - set up the data directory
+- [Configuration](configuration.md) - set defaults like the output directory
