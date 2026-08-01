@@ -2,6 +2,7 @@ package osf
 
 import (
 	"bufio"
+	"compress/gzip"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -70,6 +72,20 @@ func SpeciesFromArchive(name string) string {
 		return stem[:i]
 	}
 	return stem
+}
+
+// SpeciesFromOldName derives the species from a batch's metadata old_name. Three
+// forms occur: "<Species>_global_ordered.partNNN", "unknown.partNNN", and
+// "mixed_species.partNNN" (each optionally ending ".agc"). One rule covers all
+// three: strip a trailing ".agc", cut at the first ".part", then trim a trailing
+// "_global_ordered" (so GTDB letter-suffixed species like "Streptococcus_suis_AA"
+// survive). The result is non-empty for every published batch.
+func SpeciesFromOldName(oldName string) string {
+	s := strings.TrimSuffix(oldName, ".agc")
+	if i := strings.Index(s, ".part"); i >= 0 {
+		s = s[:i]
+	}
+	return strings.TrimSuffix(s, "_global_ordered")
 }
 
 // parseAGCNodePage decodes one OSF listing page into index entries (one per
@@ -222,6 +238,104 @@ func CrawlAGCCollection(rootURLFor func(nodeID string) string, nodes []sources.A
 		combined.Entries = append(combined.Entries, idx.Entries...)
 	}
 	return combined, nil
+}
+
+// ParseBatchMetadata reads the batch metadata TSV and returns a map from batch
+// stem to old_name, the two columns the species join needs. The header names the
+// columns, so column order is not assumed; a trailing ".agc" is stripped from
+// batch_name so the key joins the crawled ".agc" filenames whether or not the
+// metadata carries the extension. Rows missing either field are skipped.
+func ParseBatchMetadata(r io.Reader) (map[string]string, error) {
+	sc := bufio.NewScanner(r)
+	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	if !sc.Scan() {
+		if err := sc.Err(); err != nil {
+			return nil, fmt.Errorf("read batch metadata header: %w", err)
+		}
+		return map[string]string{}, nil
+	}
+	header := strings.Split(sc.Text(), "\t")
+	batchCol, oldCol := -1, -1
+	for i, h := range header {
+		switch strings.TrimSpace(h) {
+		case "batch_name":
+			batchCol = i
+		case "old_name":
+			oldCol = i
+		}
+	}
+	if batchCol < 0 || oldCol < 0 {
+		return nil, fmt.Errorf("batch metadata missing batch_name/old_name columns")
+	}
+	out := make(map[string]string)
+	for sc.Scan() {
+		fields := strings.Split(sc.Text(), "\t")
+		if batchCol >= len(fields) || oldCol >= len(fields) {
+			continue
+		}
+		batch := strings.TrimSuffix(strings.TrimSpace(fields[batchCol]), ".agc")
+		old := strings.TrimSpace(fields[oldCol])
+		if batch == "" || old == "" {
+			continue
+		}
+		out[batch] = old
+	}
+	if err := sc.Err(); err != nil {
+		return nil, fmt.Errorf("parse batch metadata: %w", err)
+	}
+	return out, nil
+}
+
+// FetchBatchMetadata downloads the gzipped batch metadata TSV from url and parses
+// it into a batch_name -> old_name map. The file is small (~20 KB) and read fully
+// into memory, gunzipped in-process.
+func FetchBatchMetadata(url string) (map[string]string, error) {
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("fetch batch metadata: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("fetch batch metadata: HTTP %d", resp.StatusCode)
+	}
+	zr, err := gzip.NewReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("gunzip batch metadata: %w", err)
+	}
+	defer zr.Close()
+	return ParseBatchMetadata(zr)
+}
+
+// BuildAGCCollectionIndex crawls the collection nodes and joins the batch
+// metadata on the batch stem so every entry carries its species in Project. The
+// numbered batch filename does not encode a species, so the join is the only
+// source of it. Batches with no metadata match keep an empty Project and are
+// returned, sorted, in unmatched: `atb agc index` fails closed on any unmatched
+// batch, while the runtime fallback tolerates them. rootURLFor and metadataURL
+// are parameters so the join is testable offline.
+func BuildAGCCollectionIndex(rootURLFor func(nodeID string) string, nodes []sources.AGCNode, metadataURL string) (idx *Index, unmatched []string, err error) {
+	idx, err = CrawlAGCCollection(rootURLFor, nodes)
+	if err != nil {
+		return nil, nil, err
+	}
+	meta, err := FetchBatchMetadata(metadataURL)
+	if err != nil {
+		return nil, nil, err
+	}
+	for i := range idx.Entries {
+		species := ""
+		stem := strings.TrimSuffix(idx.Entries[i].Filename, ".agc")
+		if old, ok := meta[stem]; ok {
+			species = SpeciesFromOldName(old)
+		}
+		if species == "" {
+			unmatched = append(unmatched, idx.Entries[i].Filename)
+		}
+		idx.Entries[i].Project = species
+	}
+	sort.Strings(unmatched)
+	return idx, unmatched, nil
 }
 
 // CollectionCacheSource is the cache source-marker for a combined collection

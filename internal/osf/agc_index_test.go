@@ -2,6 +2,7 @@ package osf
 
 import (
 	"bytes"
+	"compress/gzip"
 	"fmt"
 	"io"
 	"math"
@@ -616,5 +617,130 @@ func TestFetchAGCCollectionInvalidatesOnNodeSetChange(t *testing.T) {
 	}
 	if len(idx.Entries) != 2 {
 		t.Fatalf("node-set change must re-crawl both nodes, got %d entries", len(idx.Entries))
+	}
+}
+
+func TestSpeciesFromOldName(t *testing.T) {
+	cases := []struct{ name, in, want string }{
+		{"major-with-agc", "Escherichia_coli_global_ordered.part001.agc", "Escherichia_coli"},
+		{"major-no-agc", "Escherichia_coli_global_ordered.part001", "Escherichia_coli"},
+		{"gtdb-suffix", "Streptococcus_suis_AA_global_ordered.part007", "Streptococcus_suis_AA"},
+		{"unknown", "unknown.part042", "unknown"},
+		{"mixed", "mixed_species.part113.agc", "mixed_species"},
+	}
+	for _, c := range cases {
+		if got := SpeciesFromOldName(c.in); got != c.want {
+			t.Errorf("%s: SpeciesFromOldName(%q) = %q, want %q", c.name, c.in, got, c.want)
+		}
+	}
+}
+
+func TestParseBatchMetadata(t *testing.T) {
+	// Column order is intentionally not batch_name-first, to prove header-driven
+	// column resolution. A row missing old_name is skipped.
+	tsv := "old_name\tbatch_name\tnb_genomes\n" +
+		"Escherichia_coli_global_ordered.part001\tatb.assembly.202505_all.batch.0001\t25\n" +
+		"unknown.part002\tatb.assembly.202505_all.batch.0002\t25\n" +
+		"mixed_species.part004\tatb.assembly.202505_all.batch.0004.agc\t25\n" +
+		"\tatb.assembly.202505_all.batch.0003\t25\n"
+	m, err := ParseBatchMetadata(strings.NewReader(tsv))
+	if err != nil {
+		t.Fatalf("ParseBatchMetadata: %v", err)
+	}
+	if got := m["atb.assembly.202505_all.batch.0001"]; got != "Escherichia_coli_global_ordered.part001" {
+		t.Errorf("batch.0001 old_name: got %q", got)
+	}
+	if got := m["atb.assembly.202505_all.batch.0002"]; got != "unknown.part002" {
+		t.Errorf("batch.0002 old_name: got %q", got)
+	}
+	if got := m["atb.assembly.202505_all.batch.0004"]; got != "mixed_species.part004" {
+		t.Errorf("batch.0004 (batch_name carried .agc) must key by stem: got %q", got)
+	}
+	if _, ok := m["atb.assembly.202505_all.batch.0003"]; ok {
+		t.Errorf("batch.0003 has empty old_name and must be skipped")
+	}
+}
+
+// gzipTSV gzips s for a metadata endpoint. Kept local to the osf test package.
+func gzipTSV(t *testing.T, s string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	if _, err := zw.Write([]byte(s)); err != nil {
+		t.Fatalf("gzip write: %v", err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("gzip close: %v", err)
+	}
+	return buf.Bytes()
+}
+
+// buildJoinServer serves two collection nodes (root listing + agc_batches folder
+// contents) plus a gzipped metadata endpoint, all off one httptest server. Node
+// A holds batch.0001 (metadata match) and batch.0999 (no metadata → unmatched);
+// node B holds batch.0002.
+func buildJoinServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	folder := sources.AGCArchivesFolder
+	fileItem := func(name string) string {
+		return `{"attributes":{"name":"` + name + `","kind":"file","size":1000000,` +
+			`"extra":{"hashes":{"md5":"abc"}}},"links":{"download":"https://osf.io/download/` + name + `/"}}`
+	}
+	folderItem := func(nodeHost string) string {
+		return `{"attributes":{"name":"` + folder + `","kind":"folder"},` +
+			`"relationships":{"files":{"links":{"related":{"href":"` + nodeHost + `/folder/"}}}}}`
+	}
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/nodeA/root/":
+			fmt.Fprintf(w, `{"data":[%s],"links":{"next":null}}`, folderItem(srv.URL+"/nodeA"))
+		case "/nodeA/folder/":
+			fmt.Fprintf(w, `{"data":[%s,%s],"links":{"next":null}}`,
+				fileItem("atb.assembly.202505_all.batch.0001.agc"),
+				fileItem("atb.assembly.202505_all.batch.0999.agc"))
+		case "/nodeB/root/":
+			fmt.Fprintf(w, `{"data":[%s],"links":{"next":null}}`, folderItem(srv.URL+"/nodeB"))
+		case "/nodeB/folder/":
+			fmt.Fprintf(w, `{"data":[%s],"links":{"next":null}}`,
+				fileItem("atb.assembly.202505_all.batch.0002.agc"))
+		case "/metadata":
+			w.Write(gzipTSV(t, "batch_name\told_name\n"+
+				"atb.assembly.202505_all.batch.0001\tEscherichia_coli_global_ordered.part001\n"+
+				"atb.assembly.202505_all.batch.0002\tunknown.part002\n"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	return srv
+}
+
+func TestBuildAGCCollectionIndex(t *testing.T) {
+	srv := buildJoinServer(t)
+	defer srv.Close()
+
+	rootURLFor := func(nodeID string) string { return srv.URL + "/" + nodeID + "/root/" }
+	nodes := []sources.AGCNode{{ID: "nodeA"}, {ID: "nodeB"}}
+
+	idx, unmatched, err := BuildAGCCollectionIndex(rootURLFor, nodes, srv.URL+"/metadata")
+	if err != nil {
+		t.Fatalf("BuildAGCCollectionIndex: %v", err)
+	}
+
+	species := map[string]string{}
+	for _, e := range idx.Entries {
+		species[e.Filename] = e.Project
+	}
+	if got := species["atb.assembly.202505_all.batch.0001.agc"]; got != "Escherichia_coli" {
+		t.Errorf("batch.0001 species: got %q, want Escherichia_coli", got)
+	}
+	if got := species["atb.assembly.202505_all.batch.0002.agc"]; got != "unknown" {
+		t.Errorf("batch.0002 species: got %q, want unknown", got)
+	}
+	if got := species["atb.assembly.202505_all.batch.0999.agc"]; got != "" {
+		t.Errorf("batch.0999 has no metadata; species must be empty, got %q", got)
+	}
+	if len(unmatched) != 1 || unmatched[0] != "atb.assembly.202505_all.batch.0999.agc" {
+		t.Errorf("unmatched: got %v, want [batch.0999.agc]", unmatched)
 	}
 }
