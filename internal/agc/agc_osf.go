@@ -13,11 +13,12 @@ import (
 // archive download links are per-file GUIDs that cannot be built from the name,
 // so the engine must be handed a real URL rather than constructing one.
 type ArchiveRef struct {
-	Name   string
-	URL    string
-	MD5    string
-	SizeMB float64
-	Node   string // OSF node id (osf.Entry.ProjectID); "" for non-collection sources
+	Name    string
+	URL     string
+	MD5     string
+	SizeMB  float64
+	Node    string // OSF node id (osf.Entry.ProjectID); "" for non-collection sources
+	Species string // index species (osf.Entry.Project); "" when unknown
 }
 
 // archiveStem strips the ".agc" extension from a batch filename, yielding the
@@ -29,11 +30,12 @@ func archiveStem(filename string) string {
 // refFromEntry adapts an OSF index entry into an ArchiveRef.
 func refFromEntry(e osf.Entry) ArchiveRef {
 	return ArchiveRef{
-		Name:   archiveStem(e.Filename),
-		URL:    e.URL,
-		MD5:    e.MD5,
-		SizeMB: e.SizeMB,
-		Node:   e.ProjectID,
+		Name:    archiveStem(e.Filename),
+		URL:     e.URL,
+		MD5:     e.MD5,
+		SizeMB:  e.SizeMB,
+		Node:    e.ProjectID,
+		Species: e.Project,
 	}
 }
 

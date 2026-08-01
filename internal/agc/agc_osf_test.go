@@ -167,3 +167,27 @@ func TestRefsForGroups(t *testing.T) {
 		t.Errorf("missing = %v, want [Ghost_global_ordered_9999]", missing)
 	}
 }
+
+func TestRefsFromIndexCarriesSpecies(t *testing.T) {
+	idx := &osf.Index{Entries: []osf.Entry{
+		{
+			Project:   "Escherichia_coli",
+			ProjectID: "4jq8u",
+			Filename:  "atb.assembly.202505_all.batch.0001.agc",
+			URL:       "https://osf.io/download/aaa/",
+			MD5:       "abc",
+			SizeMB:    12.5,
+		},
+	}}
+	refs := RefsFromIndex(idx)
+	ref, ok := refs["atb.assembly.202505_all.batch.0001"]
+	if !ok {
+		t.Fatalf("ref not found by stem")
+	}
+	if ref.Species != "Escherichia_coli" {
+		t.Errorf("Species: got %q, want Escherichia_coli", ref.Species)
+	}
+	if ref.Node != "4jq8u" {
+		t.Errorf("Node: got %q, want 4jq8u", ref.Node)
+	}
+}
