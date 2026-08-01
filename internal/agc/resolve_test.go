@@ -3,6 +3,7 @@ package agc
 import (
 	"archive/zip"
 	"bytes"
+	"compress/gzip"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -249,5 +250,38 @@ func TestOpenMapEmptyZipErrors(t *testing.T) {
 	}
 	if _, err := openMap(path); err == nil {
 		t.Fatal("empty zip must error")
+	}
+}
+
+func gzipBytes(t *testing.T, content string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	if _, err := zw.Write([]byte(content)); err != nil {
+		t.Fatalf("gzip write: %v", err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("gzip close: %v", err)
+	}
+	return buf.Bytes()
+}
+
+func TestFetchMapReadsGzip(t *testing.T) {
+	dir := t.TempDir()
+	cached := filepath.Join(dir, sources.AGCArchiveMapFilename)
+	body := "SAMEA111 atb.assembly.202505_all.batch.0001\nSAMEA222 atb.assembly.202505_all.batch.0002\n"
+	if err := os.WriteFile(cached, gzipBytes(t, body), 0o644); err != nil {
+		t.Fatalf("seed gzip map: %v", err)
+	}
+
+	m, err := FetchMap(dir, "", false)
+	if err != nil {
+		t.Fatalf("FetchMap: %v", err)
+	}
+	if got := m["SAMEA111"]; got != "atb.assembly.202505_all.batch.0001" {
+		t.Errorf("SAMEA111: got %q, want batch.0001", got)
+	}
+	if got := m["SAMEA222"]; got != "atb.assembly.202505_all.batch.0002" {
+		t.Errorf("SAMEA222: got %q, want batch.0002", got)
 	}
 }

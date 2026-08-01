@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bufio"
 	"bytes"
+	"compress/gzip"
 	"fmt"
 	"io"
 	"net/http"
@@ -50,14 +51,12 @@ func ParseMap(r io.Reader) (ArchiveMap, error) {
 }
 
 // openMap returns a reader over the accession->archive map stored at path,
-// transparently decompressing when the file is a ZIP. The upstream artifact is a
-// ZIP of a single text file; a plain-text file is read as-is so a future
-// uncompressed publish still works. Every ZIP record begins "PK" (a populated
-// archive with PK\x03\x04, a valid-but-empty one with PK\x05\x06), so any
-// PK-prefixed file is routed to the zip reader - which surfaces an empty archive
-// as an error instead of a silently empty map. The map's first column is always
-// an accession, never "PK", so plain text is unambiguous. The caller must Close
-// the returned reader, which owns any underlying zip handle.
+// transparently decompressing when the file is a ZIP or gzip. The upstream
+// artifact is gzip today and was a ZIP in the preview; a plain-text file is read
+// as-is so a future uncompressed publish still works. Every ZIP record begins
+// "PK"; every gzip member begins 0x1f 0x8b. The map's first column is always an
+// accession, so plain text is unambiguous. The caller must Close the returned
+// reader, which owns any underlying decompressor handle.
 func openMap(path string) (io.ReadCloser, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -66,10 +65,14 @@ func openMap(path string) (io.ReadCloser, error) {
 	magic := make([]byte, 2)
 	n, _ := io.ReadFull(f, magic)
 	f.Close()
-	if n == 2 && bytes.Equal(magic, []byte("PK")) {
+	switch {
+	case n == 2 && bytes.Equal(magic, []byte("PK")):
 		return openZipMap(path)
+	case n == 2 && magic[0] == 0x1f && magic[1] == 0x8b:
+		return openGzipMap(path)
+	default:
+		return os.Open(path)
 	}
-	return os.Open(path)
 }
 
 // openZipMap opens the single entry inside the ZIP at path.
@@ -102,6 +105,36 @@ func (z *zipEntryReadCloser) Read(p []byte) (int, error) { return z.rc.Read(p) }
 func (z *zipEntryReadCloser) Close() error {
 	err := z.rc.Close()
 	if cerr := z.zr.Close(); err == nil {
+		err = cerr
+	}
+	return err
+}
+
+// openGzipMap opens the gzip file at path for streaming decompression.
+func openGzipMap(path string) (io.ReadCloser, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	zr, err := gzip.NewReader(f)
+	if err != nil {
+		f.Close()
+		return nil, fmt.Errorf("open gzip map %s: %w", path, err)
+	}
+	return &gzipReadCloser{zr: zr, f: f}, nil
+}
+
+// gzipReadCloser ties a gzip reader to its backing file so both close together.
+type gzipReadCloser struct {
+	zr *gzip.Reader
+	f  *os.File
+}
+
+func (g *gzipReadCloser) Read(p []byte) (int, error) { return g.zr.Read(p) }
+
+func (g *gzipReadCloser) Close() error {
+	err := g.zr.Close()
+	if cerr := g.f.Close(); err == nil {
 		err = cerr
 	}
 	return err
