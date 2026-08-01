@@ -13,9 +13,6 @@ AllTheBacteria assemblies are distributed as **AGC** (Assembled Genome Compresso
 !!! note "Which command do I want?"
     Reach for **`atb agc download`** to get genomes by sample accession or by species — it handles resolution, download, and extraction. Drop down to **`atb agc ls`/`info`/`get`** only when you already have a local `.agc` file, or to **`atb agc index`** when you want to (re)generate the by-species index. All shell out to the upstream `agc` binary, so install it first.
 
-!!! warning "By-species fetch is a preview"
-    The `--species` path resolves batches from the AllTheBacteria **staging** OSF node and is under active development. Archive locations and the index may change.
-
 ## Install the agc binary
 
 `atb` calls the upstream `agc` binary; install it once (Linux/macOS x64+arm64, Windows x64):
@@ -28,7 +25,7 @@ It is installed alongside the `atb` binary. Re-running is a no-op if `agc` is al
 
 ## Fetch genomes by species
 
-Download **every** batch of a species and extract it whole — no accession list needed. Batches are matched by the archive naming convention `<Species>_global_ordered_*`.
+Download **every** batch of a species and extract it whole — no accession list needed. Batches are matched against the index's species column: `atb agc index` joins each numbered batch (`atb.assembly.202505_all.batch.NNNN.agc`, which carries no species itself) with its species from the batch metadata when the index is built.
 
 ```bash
 # Every Acinetobacter baylyi batch, combined into one FASTA
@@ -43,13 +40,12 @@ atb agc download --species "Salmonella enterica" --dry-run
 ```
 
 The first by-species run builds the batch index (`atb_agc_files.tsv`) and caches it
-for 7 days. By default `atb` crawls the full ATB v202505 collection across its OSF
-nodes and combines their listings into one index. Pass `--osf-node <id>` to target a
-single node instead, which uses that node's pre-built published index (falling back
-to a live crawl when the published file is unavailable). The cache records which
-source produced it, so a release that repoints the index refreshes your local copy
-automatically. Use `--refresh` to force a re-fetch of the index and re-download
-archives.
+for 7 days. By default `atb` crawls the three OSF nodes that host the ATB v202505
+collection and joins every batch with its species from the batch metadata,
+combining the result into one index; a published combined index TSV is downloaded
+directly instead when one is configured. The cache records which source produced
+it, so a release that repoints the index refreshes your local copy automatically.
+Use `--refresh` to force a re-fetch of the index and re-download archives.
 
 !!! tip "Offline or pinned index"
     Pass a local index TSV with `--agc-index` to skip the network fetch entirely - useful for reproducible runs or air-gapped environments. Generate the file once with [`atb agc index`](#build-the-by-species-index):
@@ -62,11 +58,11 @@ archives.
 ## Fetch genomes by accession
 
 The default mode. Accessions resolve to AGC archives through a cached
-sample→archive map; those archives are then found in the same OSF collection index
-that `--species` uses - so `--agc-index` and `--osf-node` apply here too - then
-downloaded and each sample extracted by name. Accessions come from arguments, a
-`--from` file, or stdin. A sample whose batch is named but not yet published is
-reported as not yet available (the collection is still being uploaded).
+sample→archive map; those archives are then found in the same batch index that
+`--species` uses - so `--agc-index` applies here too - then downloaded and each
+sample extracted by name. Accessions come from arguments, a `--from` file, or
+stdin. A sample whose batch is named but not yet listed in the index is reported
+as not yet available (the collection is still being published).
 
 ```bash
 # One sample to the default per-sample output directory
@@ -103,12 +99,11 @@ Useful flags (both modes):
 | `-p`, `--parallel N` | Parallel archive downloads |
 | `--archive-dir DIR` | Where to cache `.agc` archives (default `<data-dir>/agc`) |
 | `--agc-index FILE` | Use a local batch index TSV instead of crawling the collection |
-| `--osf-node ID` | Resolve batches against one OSF node's index, not the full collection |
 | `--refresh` | Re-download the index/map and archives even if cached |
 | `--dry-run` | Resolve and list archives without downloading or extracting |
 | `--keep-going` | Continue past unresolved or failed samples (on by default); still exits non-zero if any |
 
-## Locate a sample's batch (preview)
+## Locate a sample's batch
 
 `atb agc locate` answers "which AGC batch holds my sample, and is it available
 yet?" without downloading anything. It is the search half of `atb agc download`:
@@ -124,23 +119,26 @@ atb query --species "Escherichia coli" --limit 5 --format tsv | \
   atb agc locate --from - --format json
 ```
 
-The TSV output has three columns - `accession`, `batch`, `part` - where `part` is
-the collection tier (`major`, `unknown`, or `dustbin`). JSON output adds the
-resolved OSF `url`. An accession absent from the map prints `<unresolved>`; a sample
-whose batch is named but not yet published prints `<not-yet-available>`.
+The TSV output has four columns - `accession`, `batch`, `species`, `node` - taken
+from the batch's entry in the index. JSON output adds the resolved OSF `url`. An
+accession absent from the map prints `<unresolved>` for batch, species, and node; a
+sample whose batch is named but not yet listed in the index prints its batch name
+with `<not-yet-available>` for species and node.
 
-!!! note "Preview"
-    The full v202505 collection (2.76M genomes across three OSF nodes) is still being
-    published. A `<not-yet-available>` result means the batch exists in the map but its
-    node has not finished uploading - try again later.
+!!! note "Not-yet-available batches"
+    A `<not-yet-available>` result means the accession's batch is in the
+    accession→batch map but not yet in the batch index - the collection node
+    holding it has not finished publishing that batch. Try again later.
 
 ## Build the by-species index
 
-`atb agc index` crawls an OSF node's `agc_batches/` folder and writes a
-**separate** index TSV — one row per `.agc` batch with its species, OSF download
-URL, MD5, and size. This is the file `atb agc download --species` searches.
-Generate it once and commit it for offline use, or let `atb agc download` crawl and
-cache it on demand.
+`atb agc index` crawls the `agc_batches/` folder on each of the three OSF nodes
+that host the ATB v202505 collection (`4jq8u`, `jmeqg`, `kzcnr`; 1,268 numbered
+batches in total) and joins every batch with its species from the batch
+metadata, writing a **separate** index TSV — one row per `.agc` batch with its
+species, OSF download URL, MD5, and size. This is the file
+`atb agc download --species` searches. Generate it once and commit it for
+offline use, or let `atb agc download` crawl and cache it on demand.
 
 ```bash
 # Write the index to a file you can commit / pass back via --agc-index
@@ -148,9 +146,6 @@ atb agc index -o atb_agc_files.tsv
 
 # Print it to stdout
 atb agc index
-
-# Crawl a specific OSF node
-atb agc index --osf-node z7q5y -o atb_agc_files.tsv
 ```
 
 The index is a 6-column TSV (`project`, `project_id`, `filename`, `url`, `md5`,
@@ -196,4 +191,4 @@ atb agc get genomes.agc --all --gzip 6 -t 8 -o all.fa.gz
 - [Querying genomes](query.md) — find accessions to feed into `atb agc download`
 - [Downloading genomes](download.md) — the parquet/FASTA download path
 - [Fetching & indexing data](fetch-and-index.md) — set up the data directory
-- [Configuration](configuration.md) — set defaults like the OSF node and output directory
+- [Configuration](configuration.md) — set defaults like the output directory

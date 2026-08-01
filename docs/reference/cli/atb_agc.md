@@ -35,9 +35,9 @@ Uses the upstream 'agc' binary. Run 'atb agc install' to download it
 * [atb](atb.md)	 - Query and download AllTheBacteria genomes
 * [atb agc download](atb_agc_download.md)	 - Download genome FASTA from AGC archives by accession or species
 * [atb agc get](atb_agc_get.md)	 - Extract sequences as FASTA
-* [atb agc index](atb_agc_index.md)	 - Crawl the OSF node's AGC batches into a searchable TSV index
+* [atb agc index](atb_agc_index.md)	 - Crawl the OSF collection nodes and join metadata into a searchable TSV index
 * [atb agc info](atb_agc_info.md)	 - Show archive metadata
 * [atb agc install](atb_agc_install.md)	 - Download the agc binary (Linux/macOS x64+arm64, Windows x64)
-* [atb agc locate](atb_agc_locate.md)	 - Look up which AGC batch (and OSF part) holds each accession
+* [atb agc locate](atb_agc_locate.md)	 - Look up which AGC batch (species and OSF node) holds each accession
 * [atb agc ls](atb_agc_ls.md)	 - List samples in an archive, or contigs in a sample
 
