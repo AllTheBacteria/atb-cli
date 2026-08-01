@@ -245,7 +245,7 @@ file (or stdout).`,
 	cmd.Flags().StringVarP(&outputDir, "output-dir", "o", "", "per-sample output directory; with --combine, the single output file (default stdout)")
 	cmd.Flags().StringVar(&archiveDir, "archive-dir", "", "directory to cache .agc archives (default <data-dir>/agc)")
 	cmd.Flags().StringVar(&species, "species", "", "fetch every batch of this species (whole-batch mode; no accession map needed)")
-	cmd.Flags().StringVar(&agcIndex, "agc-index", "", "local AGC batch index TSV; the default crawls the full OSF collection and joins the batch metadata")
+	cmd.Flags().StringVar(&agcIndex, "agc-index", "", "local AGC batch index TSV; the default downloads the published index or crawls the full OSF collection")
 	cmd.Flags().IntVarP(&threads, "threads", "t", 0, "agc threads (default: all cores minus one)")
 	cmd.Flags().IntVar(&lineLength, "line-length", 0, "FASTA line wrap length (default: agc's 80)")
 	cmd.Flags().IntVar(&gzipLevel, "gzip", 0, "gzip output at this level (0 = uncompressed)")
@@ -259,9 +259,10 @@ file (or stdout).`,
 }
 
 // loadAGCBatchIndex returns the batch index both download modes and locate share.
-// A local --agc-index path wins; otherwise it crawls the full collection (the
-// AGCCollectionNodes' agc_archives/ folders) and joins the batch metadata for the
-// species column, caching the merged TSV. refresh bypasses a fresh cache.
+// A local --agc-index path wins; otherwise, when a hosted combined index URL is
+// configured (sources.AGCIndexURL), that single published TSV is downloaded; with
+// no hosted URL it crawls the full collection and joins the batch metadata,
+// caching the result. refresh bypasses a fresh cache.
 func loadAGCBatchIndex(localPath, indexURL, cacheDir string, refresh bool) (*osf.Index, error) {
 	if localPath != "" {
 		f, err := os.Open(localPath)
@@ -270,6 +271,9 @@ func loadAGCBatchIndex(localPath, indexURL, cacheDir string, refresh bool) (*osf
 		}
 		defer f.Close()
 		return osf.ParseIndex(f)
+	}
+	if indexURL != "" {
+		return osf.FetchAGCIndexFromURL(cacheDir, indexURL, refresh)
 	}
 	return osf.FetchAGCCollection(cacheDir, sources.OSFNodeFilesURL, sources.AGCCollectionNodes, sources.AGCBatchMetadataURL, refresh)
 }
