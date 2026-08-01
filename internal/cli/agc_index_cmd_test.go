@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"compress/gzip"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -84,6 +87,31 @@ func TestRunAGCIndexJoinsAndWrites(t *testing.T) {
 	}
 	if buf.Len() != 0 {
 		t.Errorf("index must not be written when a batch is unmatched; got %d bytes", buf.Len())
+	}
+}
+
+func TestWriteAGCIndexKeepsOutputOnFailClose(t *testing.T) {
+	srv := buildJoinServer(t) // batch.0999 has no metadata, so the crawl fails closed
+	defer srv.Close()
+	rootURLFor := func(nodeID string) string { return srv.URL + "/" + nodeID + "/root/" }
+	nodes := []sources.AGCNode{{ID: "nodeA"}, {ID: "nodeB"}}
+
+	const sentinel = "PRE-EXISTING INDEX\n"
+	path := filepath.Join(t.TempDir(), "atb_agc_files.tsv")
+	if err := os.WriteFile(path, []byte(sentinel), 0o644); err != nil {
+		t.Fatalf("seed output file: %v", err)
+	}
+
+	// A fail-closed crawl must leave the pre-existing file untouched, not truncate it.
+	if _, err := writeAGCIndexOutput(path, io.Discard, rootURLFor, nodes, srv.URL+"/metadata"); err == nil {
+		t.Fatalf("expected fail-closed error on unmatched batch")
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read output file: %v", err)
+	}
+	if string(got) != sentinel {
+		t.Errorf("output file changed on fail-closed run: got %q, want %q", string(got), sentinel)
 	}
 }
 

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -31,6 +32,28 @@ func runAGCIndex(w io.Writer, rootURLFor func(nodeID string) string, nodes []sou
 	return len(idx.Entries), 0, nil
 }
 
+// writeAGCIndexOutput builds the combined index into a buffer and writes it out
+// only after a successful crawl: to the output path when set, otherwise to
+// stdout. A fail-closed crawl returns the error without creating or truncating
+// the output file, so a pre-existing index survives a failed refresh.
+func writeAGCIndexOutput(output string, stdout io.Writer, rootURLFor func(nodeID string) string, nodes []sources.AGCNode, metadataURL string) (written int, err error) {
+	var buf bytes.Buffer
+	n, _, err := runAGCIndex(&buf, rootURLFor, nodes, metadataURL)
+	if err != nil {
+		return 0, err
+	}
+	if output != "" {
+		if err := os.WriteFile(output, buf.Bytes(), 0o644); err != nil {
+			return 0, fmt.Errorf("write output file: %w", err)
+		}
+		return n, nil
+	}
+	if _, err := stdout.Write(buf.Bytes()); err != nil {
+		return 0, err
+	}
+	return n, nil
+}
+
 func newAGCIndexCmd() *cobra.Command {
 	var output string
 
@@ -54,27 +77,10 @@ the same layout as the master OSF index, so the existing parser round-trips it.`
   atb agc index`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			w := cmd.OutOrStdout()
-			var out *os.File
-			if output != "" {
-				f, err := os.Create(output)
-				if err != nil {
-					return fmt.Errorf("create output file: %w", err)
-				}
-				out = f
-				w = f
+			n, err := writeAGCIndexOutput(output, cmd.OutOrStdout(), sources.OSFNodeFilesURL, sources.AGCCollectionNodes, sources.AGCBatchMetadataURL)
+			if err != nil {
+				return err
 			}
-
-			n, _, runErr := runAGCIndex(w, sources.OSFNodeFilesURL, sources.AGCCollectionNodes, sources.AGCBatchMetadataURL)
-			if out != nil {
-				if cerr := out.Close(); cerr != nil && runErr == nil {
-					runErr = fmt.Errorf("close output file: %w", cerr)
-				}
-			}
-			if runErr != nil {
-				return runErr
-			}
-
 			fmt.Fprintf(cmd.ErrOrStderr(), "Wrote %d AGC batch(es) from %d OSF node(s)\n", n, len(sources.AGCCollectionNodes))
 			return nil
 		},
