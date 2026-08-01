@@ -18,7 +18,7 @@ type FetchSpec struct {
 	OutputDir  string                // per-sample output directory (ignored when Combine)
 	Combined   io.Writer             // combined output target (used when Combine)
 	ArchiveDir string                // where .agc archives are cached
-	BaseURL    string                // archive base URL; "" uses sources.ArchiveURL
+	BaseURL    string                // archive base URL for batches without an OSF ref; "" requires refs (fail-closed)
 	Refs       map[string]ArchiveRef // archive name -> OSF {URL, md5}; overrides BaseURL per archive
 	Parallel   int                   // parallel archive downloads
 	Force      bool                  // re-download archives even if cached
@@ -47,34 +47,31 @@ func ArchiveDir(dataDir, override string) string {
 	return filepath.Join(dataDir, sources.AGCArchiveSubdir)
 }
 
-// archiveURL builds the download URL for an archive. An empty baseURL uses the
-// provisional default in sources; otherwise it is "<baseURL><archive>.agc".
-func archiveURL(baseURL, archive string) string {
-	if baseURL == "" {
-		return sources.ArchiveURL(archive)
-	}
-	return baseURL + archive + ".agc"
-}
-
-// buildDownloadTasks renders one download task per archive and a reverse
-// url->archive map for error attribution. When spec.Refs has an entry for the
-// archive, its OSF download URL and md5 are used (the URL is an opaque GUID that
-// cannot be constructed from the name, and the md5 enables integrity checking);
-// otherwise the URL is built from spec.BaseURL and no md5 is set.
-func buildDownloadTasks(archives []string, spec FetchSpec) ([]download.FileTask, map[string]string) {
-	urlToArchive := make(map[string]string, len(archives))
-	tasks := make([]download.FileTask, 0, len(archives))
+// buildDownloadTasks renders one download task per resolvable archive, a reverse
+// url->archive map for error attribution, and the list of archives with no URL.
+// An archive's URL comes from its OSF ref (spec.Refs, an opaque GUID with a free
+// md5) or, when no ref exists, from spec.BaseURL; an archive with neither is
+// unresolved - a batch named by the map but absent from the index, or a species
+// batch with no published URL - and is reported so the caller can fail it rather
+// than silently skip it.
+func buildDownloadTasks(archives []string, spec FetchSpec) (tasks []download.FileTask, urlToArchive map[string]string, unresolved []string) {
+	urlToArchive = make(map[string]string, len(archives))
+	tasks = make([]download.FileTask, 0, len(archives))
 	for _, a := range archives {
-		u := archiveURL(spec.BaseURL, a)
-		md5 := ""
+		url, md5 := "", ""
 		if ref, ok := spec.Refs[a]; ok && ref.URL != "" {
-			u = ref.URL
-			md5 = ref.MD5
+			url, md5 = ref.URL, ref.MD5
+		} else if spec.BaseURL != "" {
+			url = spec.BaseURL + a + ".agc"
 		}
-		urlToArchive[u] = a
-		tasks = append(tasks, download.FileTask{URL: u, Filename: a + ".agc", MD5: md5})
+		if url == "" {
+			unresolved = append(unresolved, a)
+			continue
+		}
+		urlToArchive[url] = a
+		tasks = append(tasks, download.FileTask{URL: url, Filename: a + ".agc", MD5: md5})
 	}
-	return tasks, urlToArchive
+	return tasks, urlToArchive, unresolved
 }
 
 // downloadArchives fetches each archive cache-first into spec.ArchiveDir and
@@ -91,12 +88,15 @@ func downloadArchives(archives []string, spec FetchSpec) (paths map[string]strin
 		}
 	}
 
-	tasks, urlToArchive := buildDownloadTasks(archives, spec)
+	tasks, urlToArchive, unresolved := buildDownloadTasks(archives, spec)
 
 	dl := download.New(download.Config{OutputDir: spec.ArchiveDir, Parallel: spec.Parallel})
 	res := dl.DownloadAllFiles(tasks)
 
 	errs = make(map[string]string)
+	for _, a := range unresolved {
+		errs[a] = "no download URL: batch not in the AGC index (it may not be published yet)"
+	}
 	for _, e := range res.Errors {
 		if a, ok := urlToArchive[e.URL]; ok {
 			errs[a] = e.Error
