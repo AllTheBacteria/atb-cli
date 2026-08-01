@@ -74,7 +74,7 @@ The accession->batch map and the batch index are fetched and cached exactly as
 			if err != nil {
 				return err
 			}
-			idx, err := loadAGCBatchIndex("", sources.AGCIndexURL, cacheDir, cfg.AGC.OSFNode, refresh)
+			idx, err := loadAGCBatchIndex("", sources.AGCIndexURL, cacheDir, refresh)
 			if err != nil {
 				return err
 			}

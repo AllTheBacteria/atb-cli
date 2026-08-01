@@ -17,7 +17,6 @@ func newAGCDownloadCmd() *cobra.Command {
 		outputDir  string
 		archiveDir string
 		species    string
-		osfNode    string
 		agcIndex   string
 		threads    int
 		lineLength int
@@ -43,11 +42,12 @@ sample_accession column, or one accession per line; - for stdin), or piped
 stdin. Batches named by the map but not yet listed in the index are reported as
 "not yet available" while the collection is still being published.
 
-By species (--species "Escherichia coli"): every batch named
-<Species>_global_ordered_* is downloaded and extracted whole, with no
-sample->archive map needed. Both modes share the AGC batch index, which by
-default is crawled from the full OSF collection and cached (or read from a local
---agc-index file). This is the bulk "give me all of species X" path.
+By species (--species "Escherichia coli"): every batch whose species column in
+the index matches is downloaded and extracted whole, with no sample->archive map
+needed. Both modes share the AGC batch index, which by default is crawled from
+the full OSF collection and joined with the batch metadata for the species
+column, then cached (or read from a local --agc-index file). This is the bulk
+"give me all of species X" path.
 
 Run 'atb agc install' once to install the agc binary. By default each sample is
 written to <output-dir>/<accession>.fa; use --combine to stream everything to one
@@ -151,8 +151,7 @@ file (or stdout).`,
 				if len(args) > 0 || fromFile != "" {
 					return fmt.Errorf("--species fetches whole batches by species and cannot be combined with accession arguments or --from")
 				}
-				nodeOverride := firstNonEmpty(osfNode, cfg.AGC.OSFNode)
-				idx, err := loadAGCBatchIndex(agcIndex, sources.AGCIndexURL, archiveDirResolved, nodeOverride, refresh)
+				idx, err := loadAGCBatchIndex(agcIndex, sources.AGCIndexURL, archiveDirResolved, refresh)
 				if err != nil {
 					return err
 				}
@@ -198,8 +197,7 @@ file (or stdout).`,
 				return fmt.Errorf("no accessions given; pass them as arguments, via --from <file>, pipe them to stdin, or use --species for a whole-species fetch")
 			}
 
-			nodeOverride := firstNonEmpty(osfNode, cfg.AGC.OSFNode)
-			idx, err := loadAGCBatchIndex(agcIndex, sources.AGCIndexURL, archiveDirResolved, nodeOverride, refresh)
+			idx, err := loadAGCBatchIndex(agcIndex, sources.AGCIndexURL, archiveDirResolved, refresh)
 			if err != nil {
 				return err
 			}
@@ -247,8 +245,7 @@ file (or stdout).`,
 	cmd.Flags().StringVarP(&outputDir, "output-dir", "o", "", "per-sample output directory; with --combine, the single output file (default stdout)")
 	cmd.Flags().StringVar(&archiveDir, "archive-dir", "", "directory to cache .agc archives (default <data-dir>/agc)")
 	cmd.Flags().StringVar(&species, "species", "", "fetch every batch of this species (whole-batch mode; no accession map needed)")
-	cmd.Flags().StringVar(&osfNode, "osf-node", "", "OSF node override for the batch index (default: crawl the full collection)")
-	cmd.Flags().StringVar(&agcIndex, "agc-index", "", "local AGC batch index TSV; the default crawls the full OSF collection (or the published index with --osf-node)")
+	cmd.Flags().StringVar(&agcIndex, "agc-index", "", "local AGC batch index TSV; the default crawls the full OSF collection and joins the batch metadata")
 	cmd.Flags().IntVarP(&threads, "threads", "t", 0, "agc threads (default: all cores minus one)")
 	cmd.Flags().IntVar(&lineLength, "line-length", 0, "FASTA line wrap length (default: agc's 80)")
 	cmd.Flags().IntVar(&gzipLevel, "gzip", 0, "gzip output at this level (0 = uncompressed)")
@@ -258,28 +255,14 @@ file (or stdout).`,
 	cmd.Flags().BoolVar(&keepGoing, "keep-going", true, "continue past unresolved/failed samples (still exits non-zero if any)")
 	cmd.Flags().BoolVar(&refresh, "refresh", false, "re-download the archive map and archives even if cached")
 
-	// The staging-node override is for pre-release validation only.
-	_ = cmd.Flags().MarkHidden("osf-node")
-
 	return cmd
 }
 
-// useHostedAGCIndex reports whether the by-species index should be downloaded
-// from the published OSF file rather than crawled live: only when there is no
-// local --agc-index override, a hosted URL is configured, and the node is the
-// default. An explicit --osf-node override targets a specific node, so it must
-// crawl that node instead of reusing the default node's published snapshot.
-func useHostedAGCIndex(localPath, indexURL, node string) bool {
-	return localPath == "" && indexURL != "" && node == sources.AGCTestNodeID
-}
-
-// loadAGCBatchIndex returns the batch index both download modes search. With no
-// explicit --agc-index and no explicit --osf-node override it crawls the full
-// collection (the three AGCCollectionNodes' agc_archives/ folders) and caches the
-// merged TSV. A local --agc-index path always wins. An explicit --osf-node (flag
-// or config) selects the legacy single-node path: the hosted published TSV for
-// the default test node, or a live agc_batches/ crawl for any other node.
-func loadAGCBatchIndex(localPath, indexURL, cacheDir, nodeOverride string, refresh bool) (*osf.Index, error) {
+// loadAGCBatchIndex returns the batch index both download modes and locate share.
+// A local --agc-index path wins; otherwise it crawls the full collection (the
+// AGCCollectionNodes' agc_archives/ folders) and joins the batch metadata for the
+// species column, caching the merged TSV. refresh bypasses a fresh cache.
+func loadAGCBatchIndex(localPath, indexURL, cacheDir string, refresh bool) (*osf.Index, error) {
 	if localPath != "" {
 		f, err := os.Open(localPath)
 		if err != nil {
@@ -288,29 +271,5 @@ func loadAGCBatchIndex(localPath, indexURL, cacheDir, nodeOverride string, refre
 		defer f.Close()
 		return osf.ParseIndex(f)
 	}
-	if nodeOverride == "" {
-		return osf.FetchAGCCollection(cacheDir, sources.OSFNodeFilesURL, sources.AGCCollectionNodes, refresh)
-	}
-	return loadAGCIndex("", indexURL, cacheDir, nodeOverride, refresh)
-}
-
-// loadAGCIndex returns the by-species AGC index for Mode A. A non-empty
-// localPath is read and parsed directly (the committed atb_agc_files.tsv, or any
-// offline copy). Otherwise, when a hosted index URL is configured for the default
-// node, the published TSV is downloaded (like the master index); failing that,
-// the OSF node's agc_batches/ folder is crawled. Both network paths cache under
-// cacheDir as atb_agc_files.tsv (refresh bypasses a fresh cache).
-func loadAGCIndex(localPath, indexURL, cacheDir, node string, refresh bool) (*osf.Index, error) {
-	if localPath != "" {
-		f, err := os.Open(localPath)
-		if err != nil {
-			return nil, fmt.Errorf("open --agc-index: %w", err)
-		}
-		defer f.Close()
-		return osf.ParseIndex(f)
-	}
-	if useHostedAGCIndex(localPath, indexURL, node) {
-		return osf.FetchAGCIndexFromURL(cacheDir, indexURL, refresh)
-	}
-	return osf.FetchAGCIndex(cacheDir, sources.OSFNodeFilesURL(node), node, refresh)
+	return osf.FetchAGCCollection(cacheDir, sources.OSFNodeFilesURL, sources.AGCCollectionNodes, sources.AGCBatchMetadataURL, refresh)
 }

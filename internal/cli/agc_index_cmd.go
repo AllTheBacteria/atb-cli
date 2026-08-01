@@ -11,39 +11,41 @@ import (
 	"github.com/allthebacteria/atb-cli/internal/sources"
 )
 
-// runAGCIndex crawls an OSF node's agc_batches/ folder and writes the resulting
-// by-species index as a 6-column TSV to w, returning the number of batch entries
-// written. rootURL is the node's osfstorage listing (build it with
-// sources.OSFNodeFilesURL); node is stamped onto every row's project_id. This is
-// the network+format seam behind `atb agc index`, kept apart from the cobra glue
-// so it is unit-testable against a local server with no config plumbing.
-func runAGCIndex(w io.Writer, rootURL, node string) (int, error) {
-	idx, err := osf.CrawlAGCIndex(rootURL, node)
+// runAGCIndex builds the combined collection index (crawl the nodes, join the
+// batch metadata for the species column) and writes it as a 6-column TSV to w.
+// It returns the number of rows written and the number of batches left without a
+// species. It fails closed: if any batch is unmatched it writes nothing and
+// returns an error, so a published index is never partial. rootURLFor, nodes, and
+// metadataURL are parameters so the command is testable against a local server.
+func runAGCIndex(w io.Writer, rootURLFor func(nodeID string) string, nodes []sources.AGCNode, metadataURL string) (written, unmatched int, err error) {
+	idx, missing, err := osf.BuildAGCCollectionIndex(rootURLFor, nodes, metadataURL)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
+	}
+	if len(missing) > 0 {
+		return 0, len(missing), fmt.Errorf("%d batch(es) have no species in the metadata (first: %s); not writing a partial index", len(missing), missing[0])
 	}
 	if err := osf.WriteAGCIndexTSV(idx, w); err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	return len(idx.Entries), nil
+	return len(idx.Entries), 0, nil
 }
 
 func newAGCIndexCmd() *cobra.Command {
-	var (
-		output  string
-		osfNode string
-	)
+	var output string
 
 	cmd := &cobra.Command{
 		Use:   "index",
-		Short: "Crawl the OSF node's AGC batches into a searchable TSV index",
-		Long: `Crawl an OSF node's agc_batches/ folder and write a separate AGC index
-(atb_agc_files.tsv): one row per .agc batch with its species, OSF download URL,
-md5, and size. This is the index that 'atb agc download --species' searches to
-decide which batches to download — generate it once and commit it for offline use
-(pass it back via --agc-index), or let 'atb agc download' crawl and cache it on demand.
+		Short: "Crawl the OSF collection nodes and join metadata into a searchable TSV index",
+		Long: `Crawl every OSF collection node's agc_archives/ folder and join the batch
+metadata to write a separate AGC index (atb_agc_files.tsv): one row per .agc
+batch with its species, OSF download URL, md5, and size. This is the index that
+'atb agc download --species' searches to decide which batches to download -
+generate it once and commit it for offline use (pass it back via --agc-index),
+or let 'atb agc download' crawl and cache it on demand. It fails if any batch has
+no species in the metadata, so a published index is never partial.
 
-The index is a 6-column TSV (project, project_id, filename, url, md5, size_mb) —
+The index is a 6-column TSV (project, project_id, filename, url, md5, size_mb) -
 the same layout as the master OSF index, so the existing parser round-trips it.`,
 		Example: `  # Write the index to a file you can commit
   atb agc index -o atb_agc_files.tsv
@@ -52,12 +54,6 @@ the same layout as the master OSF index, so the existing parser round-trips it.`
   atb agc index`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := loadConfig()
-			if err != nil {
-				return err
-			}
-			node := resolveOSFNode(osfNode, cfg.AGC.OSFNode)
-
 			w := cmd.OutOrStdout()
 			var out *os.File
 			if output != "" {
@@ -69,7 +65,7 @@ the same layout as the master OSF index, so the existing parser round-trips it.`
 				w = f
 			}
 
-			n, runErr := runAGCIndex(w, sources.OSFNodeFilesURL(node), node)
+			n, _, runErr := runAGCIndex(w, sources.OSFNodeFilesURL, sources.AGCCollectionNodes, sources.AGCBatchMetadataURL)
 			if out != nil {
 				if cerr := out.Close(); cerr != nil && runErr == nil {
 					runErr = fmt.Errorf("close output file: %w", cerr)
@@ -79,13 +75,12 @@ the same layout as the master OSF index, so the existing parser round-trips it.`
 				return runErr
 			}
 
-			fmt.Fprintf(cmd.ErrOrStderr(), "Wrote %d AGC batch(es) from OSF node %s\n", n, node)
+			fmt.Fprintf(cmd.ErrOrStderr(), "Wrote %d AGC batch(es) from %d OSF node(s)\n", n, len(sources.AGCCollectionNodes))
 			return nil
 		},
 	}
 
 	cmd.Flags().StringVarP(&output, "output", "o", "", "write the index TSV to this file (default stdout)")
-	cmd.Flags().StringVar(&osfNode, "osf-node", "", "OSF node to crawl (default from config or the staging node)")
 
 	return cmd
 }

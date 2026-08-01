@@ -39,8 +39,8 @@ func TestParseAGCNodePage(t *testing.T) {
 	if e.Filename != "Acinetobacter_baylyi_global_ordered_0001.agc" {
 		t.Errorf("Filename = %q", e.Filename)
 	}
-	if e.Project != "Acinetobacter_baylyi" {
-		t.Errorf("Project (species) = %q, want Acinetobacter_baylyi", e.Project)
+	if e.Project != "" {
+		t.Errorf("Project = %q, want empty (species comes from the metadata join)", e.Project)
 	}
 	if e.URL != "https://osf.io/download/6a35c9b1cccfb0aaef166825/" {
 		t.Errorf("URL = %q", e.URL)
@@ -52,30 +52,14 @@ func TestParseAGCNodePage(t *testing.T) {
 		t.Errorf("SizeMB = %v, want ~3.890981", e.SizeMB)
 	}
 
-	// GTDB letter-suffix species must survive the split.
-	if entries[1].Project != "Streptococcus_suis_AA" {
-		t.Errorf("entries[1].Project = %q, want Streptococcus_suis_AA", entries[1].Project)
+	// parseAGCNodePage no longer guesses a species; the metadata join fills it.
+	if entries[1].Project != "" {
+		t.Errorf("entries[1].Project = %q, want empty (species comes from the join)", entries[1].Project)
 	}
 
 	wantNext := "https://api.osf.io/v2/nodes/z7q5y/files/osfstorage/6a35c88e71b808fa8816675d/?page=2"
 	if next != wantNext {
 		t.Errorf("next = %q, want %q", next, wantNext)
-	}
-}
-
-func TestSpeciesFromArchive(t *testing.T) {
-	cases := map[string]string{
-		"Acinetobacter_baylyi_global_ordered_0001.agc":   "Acinetobacter_baylyi",
-		"Streptococcus_suis_AA_global_ordered_0001.agc":  "Streptococcus_suis_AA",
-		"Pseudomonas_E_asiatica_global_ordered_0001.agc": "Pseudomonas_E_asiatica",
-		"subthreshold_remainder_global_ordered_0091.agc": "subthreshold_remainder",
-		"Acinetobacter_baylyi_global_ordered_0001":       "Acinetobacter_baylyi", // no extension
-		"weird_name_without_token.agc":                   "weird_name_without_token",
-	}
-	for in, want := range cases {
-		if got := SpeciesFromArchive(in); got != want {
-			t.Errorf("SpeciesFromArchive(%q) = %q, want %q", in, got, want)
-		}
 	}
 }
 
@@ -112,121 +96,6 @@ func TestCrawlAGCNode(t *testing.T) {
 	last := idx.Entries[len(idx.Entries)-1]
 	if last.Filename != "subthreshold_remainder_global_ordered_0091.agc" {
 		t.Errorf("last entry = %q, want the page-2 subthreshold batch", last.Filename)
-	}
-}
-
-func TestCrawlAGCIndex(t *testing.T) {
-	var server *httptest.Server
-	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch r.URL.Path {
-		case "/root":
-			raw, _ := os.ReadFile("testdata/agc_node_root.json")
-			w.Write([]byte(strings.Replace(string(raw),
-				"FOLDER_URL_PLACEHOLDER", server.URL+"/folder", 1)))
-		case "/folder":
-			raw, _ := os.ReadFile("testdata/agc_node_page1.json")
-			w.Write([]byte(strings.Replace(string(raw),
-				"https://api.osf.io/v2/nodes/z7q5y/files/osfstorage/6a35c88e71b808fa8816675d/?page=2",
-				server.URL+"/p2", 1)))
-		case "/p2":
-			raw, _ := os.ReadFile("testdata/agc_node_page2.json")
-			w.Write(raw)
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-
-	// Resolves the agc_batches folder from the node root, then crawls all pages,
-	// with no caching side effect.
-	idx, err := CrawlAGCIndex(server.URL+"/root", "z7q5y")
-	if err != nil {
-		t.Fatalf("CrawlAGCIndex: %v", err)
-	}
-	if len(idx.Entries) != 3 {
-		t.Fatalf("got %d entries, want 3", len(idx.Entries))
-	}
-	for _, e := range idx.Entries {
-		if e.ProjectID != "z7q5y" {
-			t.Errorf("ProjectID = %q, want z7q5y", e.ProjectID)
-		}
-	}
-}
-
-func TestFetchAGCIndexCacheFirst(t *testing.T) {
-	var hits int
-	var server *httptest.Server
-	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hits++
-		w.Header().Set("Content-Type", "application/json")
-		switch r.URL.Path {
-		case "/root":
-			raw, _ := os.ReadFile("testdata/agc_node_root.json")
-			// Point the agc_batches folder's related link at this server.
-			w.Write([]byte(strings.Replace(string(raw),
-				"FOLDER_URL_PLACEHOLDER", server.URL+"/folder", 1)))
-		case "/folder":
-			raw, _ := os.ReadFile("testdata/agc_node_page1.json")
-			w.Write([]byte(strings.Replace(string(raw),
-				"https://api.osf.io/v2/nodes/z7q5y/files/osfstorage/6a35c88e71b808fa8816675d/?page=2",
-				server.URL+"/p2", 1)))
-		case "/p2":
-			raw, _ := os.ReadFile("testdata/agc_node_page2.json")
-			w.Write(raw)
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-
-	dir := t.TempDir()
-
-	// Cold cache: must crawl (folder resolution + 2 pages) and write the TSV.
-	idx, err := FetchAGCIndex(dir, server.URL+"/root", "z7q5y", false)
-	if err != nil {
-		t.Fatalf("FetchAGCIndex (cold): %v", err)
-	}
-	if len(idx.Entries) != 3 {
-		t.Fatalf("cold cache: got %d entries, want 3", len(idx.Entries))
-	}
-	if hits == 0 {
-		t.Fatal("cold cache: expected server to be contacted")
-	}
-	for _, e := range idx.Entries {
-		if e.ProjectID != "z7q5y" {
-			t.Errorf("ProjectID = %q, want z7q5y", e.ProjectID)
-		}
-	}
-
-	cacheFile := filepath.Join(dir, sources.AGCIndexFilename)
-	if _, err := os.Stat(cacheFile); err != nil {
-		t.Fatalf("cold cache: index TSV not written to %s: %v", cacheFile, err)
-	}
-
-	// Warm cache: fresh file on disk, so no further server contact.
-	hitsAfterCold := hits
-	idx2, err := FetchAGCIndex(dir, server.URL+"/root", "z7q5y", false)
-	if err != nil {
-		t.Fatalf("FetchAGCIndex (warm): %v", err)
-	}
-	if len(idx2.Entries) != 3 {
-		t.Fatalf("warm cache: got %d entries, want 3", len(idx2.Entries))
-	}
-	if hits != hitsAfterCold {
-		t.Errorf("warm cache made %d extra server hit(s), want 0", hits-hitsAfterCold)
-	}
-
-	// force=true must bypass the warm cache and crawl again.
-	idx3, err := FetchAGCIndex(dir, server.URL+"/root", "z7q5y", true)
-	if err != nil {
-		t.Fatalf("FetchAGCIndex (force): %v", err)
-	}
-	if len(idx3.Entries) != 3 {
-		t.Fatalf("force refresh: got %d entries, want 3", len(idx3.Entries))
-	}
-	if hits == hitsAfterCold {
-		t.Error("force refresh did not re-contact the server")
 	}
 }
 
@@ -484,8 +353,11 @@ func TestCrawlAGCCollection(t *testing.T) {
 	if byNode["nodeA"].Filename != "Escherichia_coli_global_ordered_0001.agc" {
 		t.Errorf("nodeA entry wrong: %+v", byNode["nodeA"])
 	}
-	if byNode["nodeB"].Project != "Salmonella_enterica" {
-		t.Errorf("nodeB project wrong: %+v", byNode["nodeB"])
+	if byNode["nodeB"].Filename != "Salmonella_enterica_global_ordered_0072.agc" {
+		t.Errorf("nodeB entry wrong: %+v", byNode["nodeB"])
+	}
+	if byNode["nodeB"].Project != "" {
+		t.Errorf("crawl must leave Project empty (the join fills it), got %+v", byNode["nodeB"])
 	}
 }
 
@@ -555,6 +427,8 @@ func TestFetchAGCCollectionCacheFirst(t *testing.T) {
 			io.WriteString(w, osfFolderRoot(sources.AGCArchivesFolder, srv.URL+"/folder"))
 		case "/folder":
 			io.WriteString(w, osfFilePage("Escherichia_coli_global_ordered_0001.agc", "https://osf.io/download/ec1/", "md5ec", 1000000))
+		case "/metadata":
+			w.Write(gzipTSV(t, "batch_name\told_name\n"))
 		default:
 			http.NotFound(w, r)
 		}
@@ -564,8 +438,9 @@ func TestFetchAGCCollectionCacheFirst(t *testing.T) {
 	dir := t.TempDir()
 	nodes := []sources.AGCNode{{ID: "only"}}
 	rootURLFor := func(string) string { return srv.URL + "/root" }
+	metadataURL := srv.URL + "/metadata"
 
-	idx, err := FetchAGCCollection(dir, rootURLFor, nodes, false)
+	idx, err := FetchAGCCollection(dir, rootURLFor, nodes, metadataURL, false)
 	if err != nil {
 		t.Fatalf("cold: %v", err)
 	}
@@ -577,14 +452,14 @@ func TestFetchAGCCollectionCacheFirst(t *testing.T) {
 	}
 	coldHits := hits
 
-	if _, err := FetchAGCCollection(dir, rootURLFor, nodes, false); err != nil {
+	if _, err := FetchAGCCollection(dir, rootURLFor, nodes, metadataURL, false); err != nil {
 		t.Fatalf("warm: %v", err)
 	}
 	if hits != coldHits {
 		t.Errorf("warm cache made %d extra hit(s), want 0", hits-coldHits)
 	}
 
-	if _, err := FetchAGCCollection(dir, rootURLFor, nodes, true); err != nil {
+	if _, err := FetchAGCCollection(dir, rootURLFor, nodes, metadataURL, true); err != nil {
 		t.Fatalf("force: %v", err)
 	}
 	if hits == coldHits {
@@ -600,6 +475,8 @@ func TestFetchAGCCollectionInvalidatesOnNodeSetChange(t *testing.T) {
 			io.WriteString(w, osfFolderRoot(sources.AGCArchivesFolder, srv.URL+"/folder"))
 		case "/folder":
 			io.WriteString(w, osfFilePage("Escherichia_coli_global_ordered_0001.agc", "https://osf.io/download/ec1/", "md5ec", 1000000))
+		case "/metadata":
+			w.Write(gzipTSV(t, "batch_name\told_name\n"))
 		default:
 			http.NotFound(w, r)
 		}
@@ -607,11 +484,12 @@ func TestFetchAGCCollectionInvalidatesOnNodeSetChange(t *testing.T) {
 	defer srv.Close()
 	dir := t.TempDir()
 	rootURLFor := func(string) string { return srv.URL + "/root" }
+	metadataURL := srv.URL + "/metadata"
 
-	if _, err := FetchAGCCollection(dir, rootURLFor, []sources.AGCNode{{ID: "a"}}, false); err != nil {
+	if _, err := FetchAGCCollection(dir, rootURLFor, []sources.AGCNode{{ID: "a"}}, metadataURL, false); err != nil {
 		t.Fatal(err)
 	}
-	idx, err := FetchAGCCollection(dir, rootURLFor, []sources.AGCNode{{ID: "a"}, {ID: "b"}}, false)
+	idx, err := FetchAGCCollection(dir, rootURLFor, []sources.AGCNode{{ID: "a"}, {ID: "b"}}, metadataURL, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -742,5 +620,50 @@ func TestBuildAGCCollectionIndex(t *testing.T) {
 	}
 	if len(unmatched) != 1 || unmatched[0] != "atb.assembly.202505_all.batch.0999.agc" {
 		t.Errorf("unmatched: got %v, want [batch.0999.agc]", unmatched)
+	}
+}
+
+func TestCrawlAGCCollectionLeavesProjectEmpty(t *testing.T) {
+	srv := buildJoinServer(t)
+	defer srv.Close()
+	rootURLFor := func(nodeID string) string { return srv.URL + "/" + nodeID + "/root/" }
+
+	idx, err := CrawlAGCCollection(rootURLFor, []sources.AGCNode{{ID: "nodeA"}})
+	if err != nil {
+		t.Fatalf("CrawlAGCCollection: %v", err)
+	}
+	if len(idx.Entries) == 0 {
+		t.Fatal("no entries crawled")
+	}
+	for _, e := range idx.Entries {
+		if e.Project != "" {
+			t.Errorf("%s: Project = %q, want empty (species comes from the join)", e.Filename, e.Project)
+		}
+	}
+}
+
+func TestFetchAGCCollectionJoinsSpecies(t *testing.T) {
+	srv := buildJoinServer(t)
+	defer srv.Close()
+	dir := t.TempDir()
+	rootURLFor := func(nodeID string) string { return srv.URL + "/" + nodeID + "/root/" }
+	nodes := []sources.AGCNode{{ID: "nodeA"}, {ID: "nodeB"}}
+
+	idx, err := FetchAGCCollection(dir, rootURLFor, nodes, srv.URL+"/metadata", true)
+	if err != nil {
+		t.Fatalf("FetchAGCCollection: %v", err)
+	}
+	found := false
+	for _, e := range idx.Entries {
+		if e.Filename == "atb.assembly.202505_all.batch.0001.agc" && e.Project == "Escherichia_coli" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected batch.0001 joined to Escherichia_coli; entries=%+v", idx.Entries)
+	}
+	// The cached TSV must exist and re-parse (tolerant of the one unmatched batch).
+	if _, err := os.Stat(filepath.Join(dir, sources.AGCIndexFilename)); err != nil {
+		t.Errorf("cache not written: %v", err)
 	}
 }

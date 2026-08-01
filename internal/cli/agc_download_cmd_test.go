@@ -98,68 +98,6 @@ func writeAGCIndex(t *testing.T) string {
 	return path
 }
 
-// TestUseHostedAGCIndex locks the source-selection gate: a hosted index is used
-// only when there is no local override, a URL is configured, and the node is the
-// default. An explicit --osf-node override must still route to a live crawl.
-func TestUseHostedAGCIndex(t *testing.T) {
-	const url = "https://osf.io/download/xyz/"
-	cases := []struct {
-		name      string
-		localPath string
-		indexURL  string
-		node      string
-		want      bool
-	}{
-		{"hosted, default node", "", url, sources.AGCTestNodeID, true},
-		{"local path wins", "/tmp/x.tsv", url, sources.AGCTestNodeID, false},
-		{"no hosted url configured", "", "", sources.AGCTestNodeID, false},
-		{"overridden node crawls", "", url, "othernode", false},
-	}
-	for _, tc := range cases {
-		if got := useHostedAGCIndex(tc.localPath, tc.indexURL, tc.node); got != tc.want {
-			t.Errorf("%s: useHostedAGCIndex(%q,%q,%q) = %v, want %v",
-				tc.name, tc.localPath, tc.indexURL, tc.node, got, tc.want)
-		}
-	}
-}
-
-// TestLoadAGCIndexPrefersHostedURL verifies the wiring: with a hosted URL and the
-// default node, loadAGCIndex downloads the published TSV; a local --agc-index
-// path still wins over it.
-func TestLoadAGCIndexPrefersHostedURL(t *testing.T) {
-	var hits int
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hits++
-		w.Write([]byte(agcIndexTSV))
-	}))
-	defer server.Close()
-
-	dir := t.TempDir()
-	idx, err := loadAGCIndex("", server.URL, dir, sources.AGCTestNodeID, false)
-	if err != nil {
-		t.Fatalf("loadAGCIndex (hosted): %v", err)
-	}
-	if len(idx.Entries) != 3 {
-		t.Fatalf("hosted: got %d entries, want 3", len(idx.Entries))
-	}
-	if hits != 1 {
-		t.Errorf("hosted: expected 1 download, got %d server hits", hits)
-	}
-
-	local := writeAGCIndex(t)
-	hitsBefore := hits
-	idx2, err := loadAGCIndex(local, server.URL, dir, sources.AGCTestNodeID, false)
-	if err != nil {
-		t.Fatalf("loadAGCIndex (local): %v", err)
-	}
-	if len(idx2.Entries) != 3 {
-		t.Fatalf("local: got %d entries, want 3", len(idx2.Entries))
-	}
-	if hits != hitsBefore {
-		t.Errorf("local path made %d extra download(s), want 0", hits-hitsBefore)
-	}
-}
-
 func TestAGCDownloadSpeciesDryRun(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake agc stub requires a POSIX shell")
@@ -386,9 +324,9 @@ func TestLoadAGCBatchIndexDefaultUsesCollectionCache(t *testing.T) {
 	dir := t.TempDir()
 	cacheDir := filepath.Join(dir, sources.AGCArchiveSubdir)
 	seedAGCCollectionIndex(t, dir, agcCollectionTSV)
-	// No --osf-node override and no local path: must serve the seeded collection
-	// cache with zero network I/O (a real crawl would hit api.osf.io).
-	idx, err := loadAGCBatchIndex("", sources.AGCIndexURL, cacheDir, "", false)
+	// No local path: must serve the seeded collection cache with zero network I/O
+	// (a real crawl would hit api.osf.io).
+	idx, err := loadAGCBatchIndex("", sources.AGCIndexURL, cacheDir, false)
 	if err != nil {
 		t.Fatalf("loadAGCBatchIndex (default): %v", err)
 	}
@@ -399,29 +337,12 @@ func TestLoadAGCBatchIndexDefaultUsesCollectionCache(t *testing.T) {
 
 func TestLoadAGCBatchIndexLocalPathWins(t *testing.T) {
 	local := writeAGCIndex(t) // existing helper: 3-row TSV
-	idx, err := loadAGCBatchIndex(local, sources.AGCIndexURL, t.TempDir(), "", false)
+	idx, err := loadAGCBatchIndex(local, sources.AGCIndexURL, t.TempDir(), false)
 	if err != nil {
 		t.Fatalf("loadAGCBatchIndex (local): %v", err)
 	}
 	if len(idx.Entries) != 3 {
 		t.Fatalf("local path: got %d, want 3", len(idx.Entries))
-	}
-}
-
-func TestLoadAGCBatchIndexExplicitNodeUsesHosted(t *testing.T) {
-	var hits int
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hits++
-		w.Write([]byte(agcIndexTSV))
-	}))
-	defer server.Close()
-	// Explicit --osf-node = the default test node, with a hosted URL: hosted path.
-	idx, err := loadAGCBatchIndex("", server.URL, t.TempDir(), sources.AGCTestNodeID, false)
-	if err != nil {
-		t.Fatalf("loadAGCBatchIndex (explicit node): %v", err)
-	}
-	if len(idx.Entries) != 3 || hits != 1 {
-		t.Fatalf("explicit node should download hosted TSV once: entries=%d hits=%d", len(idx.Entries), hits)
 	}
 }
 
