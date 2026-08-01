@@ -4,7 +4,7 @@ Crawl the OSF collection nodes and join metadata into a searchable TSV index
 
 ### Synopsis
 
-Crawl every OSF collection node's agc_archives/ folder and join the batch
+Crawl every OSF collection node's agc_batches/ folder and join the batch
 metadata to write a separate AGC index (atb_agc_files.tsv): one row per .agc
 batch with its species, OSF download URL, md5, and size. This is the index that
 'atb agc download --species' searches to decide which batches to download -

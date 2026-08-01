@@ -233,7 +233,7 @@ func crawlNodeFolder(client *http.Client, rootURL, folderName, nodeID string) (*
 // CrawlAGCCollection crawls the AGCArchivesFolder of every node in nodes and
 // concatenates the results into one Index. rootURLFor maps a node id to its
 // osfstorage listing URL (sources.OSFNodeFilesURL in production; a test double
-// otherwise). A node whose agc_archives/ folder does not exist yet is skipped -
+// otherwise). A node whose agc_batches/ folder does not exist yet is skipped -
 // it is still provisioning - rather than failing the whole crawl; any other
 // error (network, HTTP, decode) is returned so a real outage is not silently
 // hidden. An existing but partially populated folder simply contributes fewer
