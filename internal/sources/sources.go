@@ -200,6 +200,13 @@ var AGCCollectionNodes = []AGCNode{
 // The legacy z7q5y test node uses AGCBatchesFolder instead.
 const AGCArchivesFolder = "agc_archives"
 
+// AGCBatchMetadataURL is the OSF /download/ URL of the batch metadata TSV
+// (8y9r2, batches_202505_metadata.tsv.gz): a gzipped TSV with batch_name and
+// old_name columns. old_name carries the species; the numbered batch filename
+// does not, so `atb agc index` joins this on batch_name to fill the species
+// column of the combined index.
+const AGCBatchMetadataURL = "https://osf.io/download/8y9r2/"
+
 // PartForNode returns the collection-part label for a node id, or "" when the id
 // is not a collection node (e.g. the legacy z7q5y test node).
 func PartForNode(nodeID string) string {
