@@ -18,15 +18,15 @@ All notable changes to `atb-cli` are documented here. Format follows [Keep a Cha
   species; given sample accessions instead (positional, a `--from` file, or
   piped stdin) it resolves each accession to the batch that holds it and
   downloads only those batches, so you extract just the samples of interest.
-  Batches resolve from a cache-first, md5-verified index that by default
-  crawls the full v202505 collection across its OSF nodes; `--osf-node <id>`
-  targets a single node's published index and `--agc-index <file>` uses a
-  local TSV. `atb agc index` builds or refreshes the by-species index. This
-  AGC path is a **preview** under active development, so archive locations and
-  the index may change.
+  Batches resolve from a cache-first, md5-verified index over the finalized
+  balanced v202505 collection across its three public OSF nodes; the combined
+  index is published for download, and the nodes are crawled and joined
+  automatically when it is unavailable. `--agc-index <file>` reads a local TSV
+  instead. `atb agc index` builds or refreshes the combined index.
 - `atb agc locate [accession...]` is the search half of `atb agc download`: it
-  resolves sample accessions to the AGC batch (and OSF collection part) that
-  holds them without downloading anything, reading the same map and index.
+  resolves sample accessions to the AGC batch that holds them, with the batch's
+  species and OSF node, without downloading anything, reading the same map and
+  index.
   Accessions come from arguments, a `--from` file, or piped stdin; output is
   TSV or `--format json`.
 
