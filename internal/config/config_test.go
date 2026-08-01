@@ -239,7 +239,6 @@ func TestAGCConfigRoundTrip(t *testing.T) {
 	cfg.AGC.ArchiveDir = "/big/disk/agc"
 	cfg.AGC.ArchiveMapURL = "https://example.test/map"
 	cfg.AGC.ArchiveBaseURL = "https://example.test/files="
-	cfg.AGC.OSFNode = "abcde"
 
 	path := filepath.Join(t.TempDir(), "config.toml")
 	if err := config.Save(cfg, path); err != nil {
@@ -251,8 +250,7 @@ func TestAGCConfigRoundTrip(t *testing.T) {
 	}
 	if got.AGC.ArchiveDir != "/big/disk/agc" ||
 		got.AGC.ArchiveMapURL != "https://example.test/map" ||
-		got.AGC.ArchiveBaseURL != "https://example.test/files=" ||
-		got.AGC.OSFNode != "abcde" {
+		got.AGC.ArchiveBaseURL != "https://example.test/files=" {
 		t.Errorf("AGC config did not round-trip: %+v", got.AGC)
 	}
 }

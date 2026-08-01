@@ -44,11 +44,6 @@ type AGCConfig struct {
 	ArchiveMapURL  string `toml:"archive_map_url"`
 	ArchiveBaseURL string `toml:"archive_base_url"`
 	ArchiveDir     string `toml:"archive_dir"`
-	// OSFNode is the OSF node id whose agc_batches/ folder is crawled for the
-	// by-species (Mode A) index. Empty means sources.AGCTestNodeID. It lives in
-	// config so the staging node ("z7q5y") is never hardcoded in command logic
-	// and moves to the production node by a config edit alone (see ADR §2.2/§4.9).
-	OSFNode string `toml:"osf_node"`
 }
 
 // DefaultDataDir returns the OS-standard data directory for ATB.

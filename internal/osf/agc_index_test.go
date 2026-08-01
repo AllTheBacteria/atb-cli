@@ -332,7 +332,7 @@ func TestCrawlAGCCollection(t *testing.T) {
 	}))
 	defer srvB.Close()
 
-	nodes := []sources.AGCNode{{ID: "nodeA", Part: "major"}, {ID: "nodeB", Part: "dustbin"}}
+	nodes := []sources.AGCNode{{ID: "nodeA"}, {ID: "nodeB"}}
 	rootURLFor := func(id string) string {
 		if id == "nodeA" {
 			return srvA.URL + "/root"
