@@ -17,17 +17,16 @@ const (
 type LocateResult struct {
 	Accession string
 	Batch     string // archive stem; "" when Status is LocateUnresolved
-	Part      string // collection-part label; "" unless Status is LocateFound
+	Species   string // index species (Project); "" unless Status is LocateFound
+	Node      string // OSF node id (ProjectID); "" unless Status is LocateFound
 	URL       string // OSF download URL; "" unless Status is LocateFound
 	Status    LocateStatus
 }
 
 // Locate resolves each accession against the accession->batch map m and the
-// batch index refs (byName, from RefsFromIndex), preserving input order.
-// partFor maps a batch's node id to its collection-part label
-// (sources.PartForNode in production). It performs no I/O: callers fetch m and
-// byName first.
-func Locate(accessions []string, m ArchiveMap, byName map[string]ArchiveRef, partFor func(nodeID string) string) []LocateResult {
+// batch index refs (byName, from RefsFromIndex), preserving input order. It
+// performs no I/O: callers fetch m and byName first.
+func Locate(accessions []string, m ArchiveMap, byName map[string]ArchiveRef) []LocateResult {
 	out := make([]LocateResult, 0, len(accessions))
 	for _, acc := range accessions {
 		archive, ok := m[acc]
@@ -43,7 +42,8 @@ func Locate(accessions []string, m ArchiveMap, byName map[string]ArchiveRef, par
 		out = append(out, LocateResult{
 			Accession: acc,
 			Batch:     archive,
-			Part:      partFor(ref.Node),
+			Species:   ref.Species,
+			Node:      ref.Node,
 			URL:       ref.URL,
 			Status:    LocateFound,
 		})

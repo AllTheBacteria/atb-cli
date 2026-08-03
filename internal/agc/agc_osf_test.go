@@ -9,16 +9,16 @@ import (
 
 func sampleAGCIndex() *osf.Index {
 	return &osf.Index{Entries: []osf.Entry{
-		{Project: "Acinetobacter_baylyi", ProjectID: "z7q5y",
+		{Project: "Acinetobacter_baylyi", ProjectID: "4jq8u",
 			Filename: "Acinetobacter_baylyi_global_ordered_0001.agc",
 			URL:      "https://osf.io/download/aaa/", MD5: "md5aaa", SizeMB: 3.89},
-		{Project: "Acinetobacter_baylyi", ProjectID: "z7q5y",
+		{Project: "Acinetobacter_baylyi", ProjectID: "4jq8u",
 			Filename: "Acinetobacter_baylyi_global_ordered_0002.agc",
 			URL:      "https://osf.io/download/bbb/", MD5: "md5bbb", SizeMB: 4.10},
-		{Project: "Streptococcus_suis_AA", ProjectID: "z7q5y",
+		{Project: "Streptococcus_suis_AA", ProjectID: "4jq8u",
 			Filename: "Streptococcus_suis_AA_global_ordered_0001.agc",
 			URL:      "https://osf.io/download/ccc/", MD5: "md5ccc", SizeMB: 10.4},
-		{Project: "subthreshold_remainder", ProjectID: "z7q5y",
+		{Project: "subthreshold_remainder", ProjectID: "4jq8u",
 			Filename: "subthreshold_remainder_global_ordered_0091.agc",
 			URL:      "https://osf.io/download/ddd/", MD5: "md5ddd", SizeMB: 114.9},
 	}}
@@ -136,7 +136,7 @@ func TestSelectBySpecies(t *testing.T) {
 
 func TestRefsFromIndexPopulatesNode(t *testing.T) {
 	idx := &osf.Index{Entries: []osf.Entry{
-		{Project: "Escherichia_coli", ProjectID: "6g8by",
+		{Project: "Escherichia_coli", ProjectID: "jmeqg",
 			Filename: "Escherichia_coli_global_ordered_0001.agc",
 			URL:      "https://osf.io/download/ec1/", MD5: "md5ec", SizeMB: 1.0},
 	}}
@@ -145,8 +145,8 @@ func TestRefsFromIndexPopulatesNode(t *testing.T) {
 	if !ok {
 		t.Fatal("ref missing")
 	}
-	if r.Node != "6g8by" {
-		t.Errorf("Node = %q, want the entry's ProjectID 6g8by", r.Node)
+	if r.Node != "jmeqg" {
+		t.Errorf("Node = %q, want the entry's ProjectID jmeqg", r.Node)
 	}
 }
 
@@ -165,5 +165,29 @@ func TestRefsForGroups(t *testing.T) {
 	}
 	if len(missing) != 1 || missing[0] != "Ghost_global_ordered_9999" {
 		t.Errorf("missing = %v, want [Ghost_global_ordered_9999]", missing)
+	}
+}
+
+func TestRefsFromIndexCarriesSpecies(t *testing.T) {
+	idx := &osf.Index{Entries: []osf.Entry{
+		{
+			Project:   "Escherichia_coli",
+			ProjectID: "4jq8u",
+			Filename:  "atb.assembly.202505_all.batch.0001.agc",
+			URL:       "https://osf.io/download/aaa/",
+			MD5:       "abc",
+			SizeMB:    12.5,
+		},
+	}}
+	refs := RefsFromIndex(idx)
+	ref, ok := refs["atb.assembly.202505_all.batch.0001"]
+	if !ok {
+		t.Fatalf("ref not found by stem")
+	}
+	if ref.Species != "Escherichia_coli" {
+		t.Errorf("Species: got %q, want Escherichia_coli", ref.Species)
+	}
+	if ref.Node != "4jq8u" {
+		t.Errorf("Node: got %q, want 4jq8u", ref.Node)
 	}
 }

@@ -1,6 +1,6 @@
 ## atb agc locate
 
-Look up which AGC batch (and OSF part) holds each accession
+Look up which AGC batch (species and OSF node) holds each accession
 
 ### Synopsis
 

@@ -104,67 +104,49 @@ const AGCVersion = "v3.2.3"
 const AGCRepo = "refresh-bio/agc"
 
 // ---------------------------------------------------------------------------
-// AGC genome archives (PROVISIONAL)
+// AGC genome archives
 // ---------------------------------------------------------------------------
-// AllTheBacteria is moving its genome batches from miniphy .tar.xz to AGC
-// archives. The host below is the prototype's CESGO endpoint; OSF is still
-// under discussion. These are intentionally isolated here so switching hosts
-// (or to OSF's per-file /download/<id>/ shape) is a one-line change.
-// Reference prototype: https://github.com/tam-km-truong/atb_agc_extract
-// Override at runtime via config keys agc.archive_map_url / agc.archive_base_url.
+// AllTheBacteria distributes its genome batches as AGC archives hosted on OSF.
+// The accession-to-batch map and the local cache layout are isolated here so a
+// host change is a one-line edit. Override at runtime via config keys
+// agc.archive_map_url / agc.archive_base_url.
 
-// AGCArchiveMapURL is the accession->batch list for the full v202505 collection,
-// published on OSF as a ZIP of a ~148 MB two-column text file (accession, batch
-// name without .agc). atb caches the ZIP as downloaded and decompresses on read.
-const AGCArchiveMapURL = "https://osf.io/download/2xjt8/"
+// AGCArchiveMapURL is the accession->batch list for the balanced v202505
+// collection, published on OSF as a gzipped two-column text file
+// (assemblies_filelist.txt.gz: accession, batch name without .agc). atb caches
+// the gzip as downloaded and decompresses on read.
+const AGCArchiveMapURL = "https://osf.io/download/gtqrx/"
 
 // AGCArchiveMapFilename is the local cache filename for the archive map. It keeps
-// the .zip extension because the artifact is cached exactly as downloaded.
-const AGCArchiveMapFilename = "agc_file_list.txt.zip"
-
-// AGCArchiveBaseURL is the prefix for downloading a single .agc archive;
-// ArchiveURL appends "<archive>.agc".
-const AGCArchiveBaseURL = "https://data-access.cesgo.org/index.php/s/w8ylLnVjCokP0B5/download?path=%2F&files="
+// the .gz extension because the artifact is cached exactly as downloaded.
+const AGCArchiveMapFilename = "assemblies_filelist.txt.gz"
 
 // AGCArchiveSubdir is the <data-dir> subdirectory holding cached archives and
 // the archive map. Mirrors SketchSubdir.
 const AGCArchiveSubdir = "agc"
 
-// ArchiveURL returns the download URL for the named archive (without ".agc").
-func ArchiveURL(archive string) string {
-	return AGCArchiveBaseURL + archive + ".agc"
-}
-
 // ---------------------------------------------------------------------------
-// AGC genome archives over OSF (TEST DATA — node z7q5y)
+// AGC index over OSF
 // ---------------------------------------------------------------------------
-// The AGC batches are staged on the OSF "ATB testing" node z7q5y under the
-// agc_batches/ folder. Unlike the master index, these batches are NOT
-// registered in all_atb_files.tsv. While the data is under test, atb builds a
-// SEPARATE index TSV by crawling the OSF API — each batch carries its own
-// opaque /download/<guid>/ URL, md5, and size. Keeping this isolated from the
-// master index lets the test data be promoted (or discarded) without touching
-// production paths. See docs/design/agc-osf-test-implementation.md.
+// The AGC batches are not registered in the master all_atb_files.tsv, so atb
+// builds a SEPARATE index TSV: each batch carries its own opaque
+// /download/<guid>/ URL, md5, and size. atb reads the published combined index
+// when it is available (AGCIndexURL) and crawls the collection nodes to rebuild
+// it otherwise. The collection layout is defined below.
 
 // OSFAPIBase is the root of the OSF REST API (v2).
 const OSFAPIBase = "https://api.osf.io/v2"
-
-// AGCTestNodeID is the OSF node hosting the AGC test batches ("ATB testing").
-const AGCTestNodeID = "z7q5y"
-
-// AGCBatchesFolder is the folder on the node holding the .agc batch files.
-const AGCBatchesFolder = "agc_batches"
 
 // AGCIndexFilename is the local cache filename for the AGC index TSV, stored in
 // <data-dir>/agc/ alongside the cached archives.
 const AGCIndexFilename = "atb_agc_files.tsv"
 
-// AGCIndexURL is the OSF /download/<guid>/ URL of the published AGC index TSV,
-// hosted on the main ATB node h7wzy alongside the master index. atb downloads this
-// single file (like the master IndexURL) instead of crawling the z7q5y
-// agc_batches/ folder page by page. Set it back to "" to fall back to the live
-// crawl (see useHostedAGCIndex). The batch rows inside still point at z7q5y.
-const AGCIndexURL = "https://osf.io/download/6a477a94899134067adf99c9/"
+// AGCIndexURL is the OSF /download/ URL of the published combined AGC index TSV
+// (crawl + metadata join, produced by `atb agc index`). Empty means no hosted
+// index is published yet: the runtime falls back to crawling the collection nodes
+// and joining the metadata on demand. Set this to the hosted TSV's /download/
+// URL once it is uploaded.
+const AGCIndexURL = ""
 
 // OSFNodeFilesURL returns the osfstorage root listing URL for an OSF node, the
 // entry point for crawling its folders.
@@ -173,43 +155,37 @@ func OSFNodeFilesURL(nodeID string) string {
 }
 
 // ---------------------------------------------------------------------------
-// AGC full collection over OSF (v202505, PREVIEW)
+// AGC balanced collection over OSF (v202505)
 // ---------------------------------------------------------------------------
-// The full ATB v202505 AGC collection (2.76M genomes) is hosted across three
-// public OSF nodes, each under an agc_archives/ folder. The batch index is the
-// concatenation of all three nodes' listings. Like the z7q5y test batches these
-// are NOT registered in the master index; atb builds a combined index by
-// crawling the OSF API. Kept isolated so the collection can be promoted or a
-// future combined hosted TSV dropped in without touching production paths.
+// The balanced ATB v202505 AGC collection is hosted across three public OSF
+// nodes, each under an agc_batches/ folder of numbered .agc batches. These
+// batches are NOT registered in the master index; atb builds a combined index
+// by crawling the OSF API across all three nodes and joining the batch
+// metadata. Kept isolated so a future combined hosted TSV can be dropped in
+// without touching production paths.
 
-// AGCNode identifies one OSF node in the collection together with the
-// human-facing "part" label shown in `atb agc locate` output.
+// AGCNode identifies one OSF node in the collection.
 type AGCNode struct {
-	ID   string
-	Part string
+	ID string
 }
 
-// AGCCollectionNodes are the OSF nodes that together host the full collection.
+// AGCCollectionNodes are the OSF nodes that together host the balanced v202505
+// collection; each has an agc_batches/ folder of numbered .agc batches.
 var AGCCollectionNodes = []AGCNode{
-	{ID: "6g8by", Part: "major"},
-	{ID: "9fqeh", Part: "unknown"},
-	{ID: "xrzub", Part: "dustbin"},
+	{ID: "4jq8u"},
+	{ID: "jmeqg"},
+	{ID: "kzcnr"},
 }
 
 // AGCArchivesFolder is the folder holding .agc batches on the collection nodes.
-// The legacy z7q5y test node uses AGCBatchesFolder instead.
-const AGCArchivesFolder = "agc_archives"
+const AGCArchivesFolder = "agc_batches"
 
-// PartForNode returns the collection-part label for a node id, or "" when the id
-// is not a collection node (e.g. the legacy z7q5y test node).
-func PartForNode(nodeID string) string {
-	for _, n := range AGCCollectionNodes {
-		if n.ID == nodeID {
-			return n.Part
-		}
-	}
-	return ""
-}
+// AGCBatchMetadataURL is the OSF /download/ URL of the batch metadata TSV
+// (8y9r2, batches_202505_metadata.tsv.gz): a gzipped TSV with batch_name and
+// old_name columns. old_name carries the species; the numbered batch filename
+// does not, so `atb agc index` joins this on batch_name to fill the species
+// column of the combined index.
+const AGCBatchMetadataURL = "https://osf.io/download/8y9r2/"
 
 // ---------------------------------------------------------------------------
 // Genome assemblies

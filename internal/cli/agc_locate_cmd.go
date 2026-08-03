@@ -22,7 +22,7 @@ func newAGCLocateCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "locate [accession...]",
-		Short: "Look up which AGC batch (and OSF part) holds each accession",
+		Short: "Look up which AGC batch (species and OSF node) holds each accession",
 		Long: `Resolve sample accessions to the AGC batch that contains them, without
 downloading anything. This is the search half of 'atb agc download': it answers
 "which batch is my sample in, and is that batch available yet?".
@@ -74,13 +74,13 @@ The accession->batch map and the batch index are fetched and cached exactly as
 			if err != nil {
 				return err
 			}
-			idx, err := loadAGCBatchIndex("", sources.AGCIndexURL, cacheDir, cfg.AGC.OSFNode, refresh)
+			idx, err := loadAGCBatchIndex("", sources.AGCIndexURL, cacheDir, refresh)
 			if err != nil {
 				return err
 			}
 			byName := agc.RefsFromIndex(idx)
 
-			results := agc.Locate(accessions, m, byName, sources.PartForNode)
+			results := agc.Locate(accessions, m, byName)
 			w := cmd.OutOrStdout()
 			if format == "json" {
 				return writeLocateJSON(w, results)
@@ -96,27 +96,27 @@ The accession->batch map and the batch index are fetched and cached exactly as
 	return cmd
 }
 
-// locateDisplay maps a result's status to its batch/part cells, using
+// locateDisplay maps a result's status to its batch/species/node cells, using
 // placeholder tokens for the two not-found cases so every row is unambiguous.
-func locateDisplay(r agc.LocateResult) (batch, part string) {
+func locateDisplay(r agc.LocateResult) (batch, species, node string) {
 	switch r.Status {
 	case agc.LocateUnresolved:
-		return "<unresolved>", "<unresolved>"
+		return "<unresolved>", "<unresolved>", "<unresolved>"
 	case agc.LocateNotYetAvailable:
-		return r.Batch, "<not-yet-available>"
+		return r.Batch, "<not-yet-available>", "<not-yet-available>"
 	default:
-		return r.Batch, r.Part
+		return r.Batch, r.Species, r.Node
 	}
 }
 
 func writeLocateTSV(w io.Writer, results []agc.LocateResult) error {
 	bw := bufio.NewWriter(w)
-	if _, err := fmt.Fprintln(bw, "accession\tbatch\tpart"); err != nil {
+	if _, err := fmt.Fprintln(bw, "accession\tbatch\tspecies\tnode"); err != nil {
 		return err
 	}
 	for _, r := range results {
-		batch, part := locateDisplay(r)
-		if _, err := fmt.Fprintf(bw, "%s\t%s\t%s\n", r.Accession, batch, part); err != nil {
+		batch, species, node := locateDisplay(r)
+		if _, err := fmt.Fprintf(bw, "%s\t%s\t%s\t%s\n", r.Accession, batch, species, node); err != nil {
 			return err
 		}
 	}
@@ -128,15 +128,16 @@ func writeLocateTSV(w io.Writer, results []agc.LocateResult) error {
 type locateJSONRow struct {
 	Accession string `json:"accession"`
 	Batch     string `json:"batch"`
-	Part      string `json:"part"`
+	Species   string `json:"species"`
+	Node      string `json:"node"`
 	URL       string `json:"url"`
 }
 
 func writeLocateJSON(w io.Writer, results []agc.LocateResult) error {
 	rows := make([]locateJSONRow, 0, len(results))
 	for _, r := range results {
-		batch, part := locateDisplay(r)
-		rows = append(rows, locateJSONRow{Accession: r.Accession, Batch: batch, Part: part, URL: r.URL})
+		batch, species, node := locateDisplay(r)
+		rows = append(rows, locateJSONRow{Accession: r.Accession, Batch: batch, Species: species, Node: node, URL: r.URL})
 	}
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")

@@ -2,13 +2,16 @@ package osf
 
 import (
 	"bufio"
+	"compress/gzip"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -20,10 +23,6 @@ import (
 // the requested name - distinct from a network or decode failure, so a
 // still-provisioning collection node can be skipped without masking real errors.
 var ErrFolderNotFound = errors.New("folder not found on OSF node")
-
-// speciesToken separates the species prefix from the batch ordinal in an AGC
-// archive filename: "<Species>_global_ordered_<NNNN>.agc".
-const speciesToken = "_global_ordered_"
 
 // osfAPIPage is one page of an OSF "files" listing
 // (GET /v2/nodes/<id>/files/osfstorage/<folder>/). Only the fields atb needs
@@ -60,21 +59,24 @@ type osfAPIItem struct {
 	} `json:"relationships"`
 }
 
-// SpeciesFromArchive derives the species prefix from an AGC archive name by
-// splitting on the literal "_global_ordered_" token. This keeps GTDB
-// letter-suffixes ("Streptococcus_suis_AA") and the special
-// "subthreshold_remainder" batch intact. The ".agc" extension is optional.
-func SpeciesFromArchive(name string) string {
-	stem := strings.TrimSuffix(name, ".agc")
-	if i := strings.Index(stem, speciesToken); i >= 0 {
-		return stem[:i]
+// SpeciesFromOldName derives the species from a batch's metadata old_name. Three
+// forms occur: "<Species>_global_ordered.partNNN", "unknown.partNNN", and
+// "mixed_species.partNNN" (each optionally ending ".agc"). One rule covers all
+// three: strip a trailing ".agc", cut at the first ".part", then trim a trailing
+// "_global_ordered" (so GTDB letter-suffixed species like "Streptococcus_suis_AA"
+// survive). The result is non-empty for every published batch.
+func SpeciesFromOldName(oldName string) string {
+	s := strings.TrimSuffix(oldName, ".agc")
+	if i := strings.Index(s, ".part"); i >= 0 {
+		s = s[:i]
 	}
-	return stem
+	return strings.TrimSuffix(s, "_global_ordered")
 }
 
 // parseAGCNodePage decodes one OSF listing page into index entries (one per
 // file, folders skipped) and returns the URL of the next page ("" when last).
-// ProjectID is left empty here; the crawler stamps it with the node id.
+// ProjectID is left empty here; the crawler stamps it with the node id. Project
+// (the species) is also left empty; the metadata join fills it.
 func parseAGCNodePage(r io.Reader) ([]Entry, string, error) {
 	var page osfAPIPage
 	if err := json.NewDecoder(r).Decode(&page); err != nil {
@@ -87,7 +89,6 @@ func parseAGCNodePage(r io.Reader) ([]Entry, string, error) {
 		}
 		name := it.Attributes.Name
 		entries = append(entries, Entry{
-			Project:  SpeciesFromArchive(name),
 			Filename: name,
 			URL:      it.Links.Download,
 			MD5:      it.Attributes.Extra.Hashes.MD5,
@@ -97,9 +98,25 @@ func parseAGCNodePage(r io.Reader) ([]Entry, string, error) {
 	return entries, page.Links.Next, nil
 }
 
-// crawlMaxPages caps pagination so a malformed "next" cycle cannot loop
-// forever; 767 batches at <=100/page is 8 pages, so this is generous.
+// crawlMaxPages caps pagination so a malformed "next" cycle cannot loop forever.
+// The crawl requests sort=name&page[size]=100, so 1268 batches is about 13 pages;
+// the 10000 cap is a generous loop guard.
 const crawlMaxPages = 10000
+
+// withStableSort returns rawURL with OSF's stable total-order params applied, so
+// page-number pagination cannot overlap or gap. OSF echoes these params in each
+// page's "next" link, so stamping the start URL covers the whole walk.
+func withStableSort(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+	q := u.Query()
+	q.Set("sort", "name")
+	q.Set("page[size]", "100")
+	u.RawQuery = q.Encode()
+	return u.String()
+}
 
 // CrawlAGCNode walks an OSF folder listing starting at startURL, following the
 // "next" link until exhausted, and returns an Index of every .agc file found.
@@ -109,9 +126,9 @@ func CrawlAGCNode(client *http.Client, startURL, nodeID string) (*Index, error) 
 		client = &http.Client{Timeout: 60 * time.Second}
 	}
 	idx := &Index{}
-	url := startURL
-	for pages := 0; url != "" && pages < crawlMaxPages; pages++ {
-		resp, err := client.Get(url)
+	pageURL := withStableSort(startURL)
+	for pages := 0; pageURL != "" && pages < crawlMaxPages; pages++ {
+		resp, err := client.Get(pageURL)
 		if err != nil {
 			return nil, fmt.Errorf("crawl OSF node: %w", err)
 		}
@@ -128,7 +145,7 @@ func CrawlAGCNode(client *http.Client, startURL, nodeID string) (*Index, error) 
 			entries[i].ProjectID = nodeID
 		}
 		idx.Entries = append(idx.Entries, entries...)
-		url = next
+		pageURL = next
 	}
 	return idx, nil
 }
@@ -150,31 +167,55 @@ func WriteAGCIndexTSV(idx *Index, w io.Writer) error {
 	return bw.Flush()
 }
 
-// findFolderURL fetches an OSF node's root listing and returns the contents
-// listing URL (the "related" link) of the named subfolder. OSF does not let you
-// address a folder by name directly, so the root must be listed to discover the
-// opaque per-folder endpoint.
-func findFolderURL(client *http.Client, rootURL, folderName string) (string, error) {
-	resp, err := client.Get(rootURL)
-	if err != nil {
-		return "", fmt.Errorf("list OSF node root: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("list OSF node root: HTTP %d", resp.StatusCode)
-	}
-	var page osfAPIPage
-	if err := json.NewDecoder(resp.Body).Decode(&page); err != nil {
-		return "", fmt.Errorf("decode OSF node root: %w", err)
-	}
-	for _, it := range page.Data {
-		if it.Attributes.Kind == "folder" && it.Attributes.Name == folderName {
-			href := it.Relationships.Files.Links.Related.Href
-			if href == "" {
-				return "", fmt.Errorf("folder %q has no contents link", folderName)
-			}
-			return href, nil
+// FirstDuplicateBatch returns the first (project_id, filename) pair that appears
+// more than once in idx, or "", false when every batch is distinct. A duplicate
+// is never legitimate: it means the crawl saw the same batch twice, so the
+// publish path uses this to fail closed rather than ship a silently corrupt index.
+func FirstDuplicateBatch(idx *Index) (string, bool) {
+	seen := make(map[string]bool, len(idx.Entries))
+	for _, e := range idx.Entries {
+		key := e.ProjectID + "\t" + e.Filename
+		if seen[key] {
+			return e.ProjectID + "/" + e.Filename, true
 		}
+		seen[key] = true
+	}
+	return "", false
+}
+
+// findFolderURL walks an OSF node's root listing (requesting the stable total
+// order) and returns the contents listing URL (the "related" link) of the named
+// subfolder. OSF does not let you address a folder by name directly, so the root
+// must be listed to discover the opaque per-folder endpoint. The folder can fall
+// on any page, so the walk follows "next" until the folder is found or the pages
+// run out.
+func findFolderURL(client *http.Client, rootURL, folderName string) (string, error) {
+	pageURL := withStableSort(rootURL)
+	for pages := 0; pageURL != "" && pages < crawlMaxPages; pages++ {
+		resp, err := client.Get(pageURL)
+		if err != nil {
+			return "", fmt.Errorf("list OSF node root: %w", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			return "", fmt.Errorf("list OSF node root: HTTP %d", resp.StatusCode)
+		}
+		var page osfAPIPage
+		err = json.NewDecoder(resp.Body).Decode(&page)
+		resp.Body.Close()
+		if err != nil {
+			return "", fmt.Errorf("decode OSF node root: %w", err)
+		}
+		for _, it := range page.Data {
+			if it.Attributes.Kind == "folder" && it.Attributes.Name == folderName {
+				href := it.Relationships.Files.Links.Related.Href
+				if href == "" {
+					return "", fmt.Errorf("folder %q has no contents link", folderName)
+				}
+				return href, nil
+			}
+		}
+		pageURL = page.Links.Next
 	}
 	return "", fmt.Errorf("folder %q: %w", folderName, ErrFolderNotFound)
 }
@@ -189,21 +230,10 @@ func crawlNodeFolder(client *http.Client, rootURL, folderName, nodeID string) (*
 	return CrawlAGCNode(client, folderURL, nodeID)
 }
 
-// CrawlAGCIndex resolves the agc_batches/ folder from an OSF node's root
-// listing (rootURL, build it with sources.OSFNodeFilesURL) and crawls every page
-// of that folder into an Index, with no caching side effect. Each entry's
-// ProjectID is stamped with nodeID. This is the network half of FetchAGCIndex,
-// exposed so `atb agc index` can crawl on demand and write the TSV wherever the
-// user wants it.
-func CrawlAGCIndex(rootURL, nodeID string) (*Index, error) {
-	client := &http.Client{Timeout: 2 * time.Minute}
-	return crawlNodeFolder(client, rootURL, sources.AGCBatchesFolder, nodeID)
-}
-
 // CrawlAGCCollection crawls the AGCArchivesFolder of every node in nodes and
 // concatenates the results into one Index. rootURLFor maps a node id to its
 // osfstorage listing URL (sources.OSFNodeFilesURL in production; a test double
-// otherwise). A node whose agc_archives/ folder does not exist yet is skipped -
+// otherwise). A node whose agc_batches/ folder does not exist yet is skipped -
 // it is still provisioning - rather than failing the whole crawl; any other
 // error (network, HTTP, decode) is returned so a real outage is not silently
 // hidden. An existing but partially populated folder simply contributes fewer
@@ -222,6 +252,104 @@ func CrawlAGCCollection(rootURLFor func(nodeID string) string, nodes []sources.A
 		combined.Entries = append(combined.Entries, idx.Entries...)
 	}
 	return combined, nil
+}
+
+// ParseBatchMetadata reads the batch metadata TSV and returns a map from batch
+// stem to old_name, the two columns the species join needs. The header names the
+// columns, so column order is not assumed; a trailing ".agc" is stripped from
+// batch_name so the key joins the crawled ".agc" filenames whether or not the
+// metadata carries the extension. Rows missing either field are skipped.
+func ParseBatchMetadata(r io.Reader) (map[string]string, error) {
+	sc := bufio.NewScanner(r)
+	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	if !sc.Scan() {
+		if err := sc.Err(); err != nil {
+			return nil, fmt.Errorf("read batch metadata header: %w", err)
+		}
+		return map[string]string{}, nil
+	}
+	header := strings.Split(sc.Text(), "\t")
+	batchCol, oldCol := -1, -1
+	for i, h := range header {
+		switch strings.TrimSpace(h) {
+		case "batch_name":
+			batchCol = i
+		case "old_name":
+			oldCol = i
+		}
+	}
+	if batchCol < 0 || oldCol < 0 {
+		return nil, fmt.Errorf("batch metadata missing batch_name/old_name columns")
+	}
+	out := make(map[string]string)
+	for sc.Scan() {
+		fields := strings.Split(sc.Text(), "\t")
+		if batchCol >= len(fields) || oldCol >= len(fields) {
+			continue
+		}
+		batch := strings.TrimSuffix(strings.TrimSpace(fields[batchCol]), ".agc")
+		old := strings.TrimSpace(fields[oldCol])
+		if batch == "" || old == "" {
+			continue
+		}
+		out[batch] = old
+	}
+	if err := sc.Err(); err != nil {
+		return nil, fmt.Errorf("parse batch metadata: %w", err)
+	}
+	return out, nil
+}
+
+// FetchBatchMetadata downloads the gzipped batch metadata TSV from url and parses
+// it into a batch_name -> old_name map. The file is small (~20 KB) and read fully
+// into memory, gunzipped in-process.
+func FetchBatchMetadata(url string) (map[string]string, error) {
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("fetch batch metadata: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("fetch batch metadata: HTTP %d", resp.StatusCode)
+	}
+	zr, err := gzip.NewReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("gunzip batch metadata: %w", err)
+	}
+	defer zr.Close()
+	return ParseBatchMetadata(zr)
+}
+
+// BuildAGCCollectionIndex crawls the collection nodes and joins the batch
+// metadata on the batch stem so every entry carries its species in Project. The
+// numbered batch filename does not encode a species, so the join is the only
+// source of it. Batches with no metadata match keep an empty Project and are
+// returned, sorted, in unmatched: `atb agc index` fails closed on any unmatched
+// batch, while the runtime fallback tolerates them. rootURLFor and metadataURL
+// are parameters so the join is testable offline.
+func BuildAGCCollectionIndex(rootURLFor func(nodeID string) string, nodes []sources.AGCNode, metadataURL string) (idx *Index, unmatched []string, err error) {
+	idx, err = CrawlAGCCollection(rootURLFor, nodes)
+	if err != nil {
+		return nil, nil, err
+	}
+	meta, err := FetchBatchMetadata(metadataURL)
+	if err != nil {
+		return nil, nil, err
+	}
+	for i := range idx.Entries {
+		species := ""
+		stem := strings.TrimSuffix(idx.Entries[i].Filename, ".agc")
+		if old, ok := meta[stem]; ok {
+			species = SpeciesFromOldName(old)
+		}
+		if species == "" {
+			unmatched = append(unmatched, idx.Entries[i].Filename)
+		}
+		idx.Entries[i].Project = species
+	}
+	sort.Strings(unmatched)
+	return idx, unmatched, nil
 }
 
 // CollectionCacheSource is the cache source-marker for a combined collection
@@ -278,11 +406,10 @@ func agcCacheFresh(cachePath, want string) bool {
 // TSV from url, mirroring FetchIndex: a cached copy under
 // <cacheDir>/atb_agc_files.tsv is reused while younger than CacheMaxAge and
 // while its source marker still matches url, otherwise the file is downloaded
-// and written atomically (alongside a refreshed marker) before parsing. This is
-// the hosted counterpart to FetchAGCIndex's live crawl — once the index has been
-// published as a single OSF file (sources.AGCIndexURL) there is no need to walk
-// the node's agc_batches/ folder page by page. Set force=true to bypass a fresh
-// cache.
+// and written atomically (alongside a refreshed marker) before parsing. It reads
+// the index that has been published as a single OSF file (sources.AGCIndexURL),
+// so there is no need to crawl the collection nodes page by page. Set force=true
+// to bypass a fresh cache.
 func FetchAGCIndexFromURL(cacheDir, url string, force bool) (*Index, error) {
 	if err := os.MkdirAll(cacheDir, 0755); err != nil {
 		return nil, fmt.Errorf("create cache dir: %w", err)
@@ -349,12 +476,15 @@ func writeIndexCache(cached string, idx *Index, source string) error {
 }
 
 // FetchAGCCollection returns the combined batch index across the collection
-// nodes, caching the merged TSV under <cacheDir>/atb_agc_files.tsv with a source
-// marker derived from the node set (CollectionCacheSource). A cached copy younger
-// than CacheMaxAge whose marker still matches is reused; otherwise the nodes are
-// crawled and the result cached atomically. rootURLFor is sources.OSFNodeFilesURL
-// in production. Set force=true to bypass a fresh cache.
-func FetchAGCCollection(cacheDir string, rootURLFor func(nodeID string) string, nodes []sources.AGCNode, force bool) (*Index, error) {
+// nodes, joined against the batch metadata for the species column, caching the
+// merged TSV under <cacheDir>/atb_agc_files.tsv with a source marker derived from
+// the node set (CollectionCacheSource). A cached copy younger than CacheMaxAge
+// whose marker still matches is reused; otherwise the nodes are crawled, joined,
+// and cached atomically. This runtime fallback is tolerant of a batch the
+// metadata does not yet cover (its species stays empty). rootURLFor and
+// metadataURL are sources.OSFNodeFilesURL and sources.AGCBatchMetadataURL in
+// production. Set force=true to bypass a fresh cache.
+func FetchAGCCollection(cacheDir string, rootURLFor func(nodeID string) string, nodes []sources.AGCNode, metadataURL string, force bool) (*Index, error) {
 	if err := os.MkdirAll(cacheDir, 0755); err != nil {
 		return nil, fmt.Errorf("create cache dir: %w", err)
 	}
@@ -370,46 +500,12 @@ func FetchAGCCollection(cacheDir string, rootURLFor func(nodeID string) string, 
 		return ParseIndex(f)
 	}
 
-	idx, err := CrawlAGCCollection(rootURLFor, nodes)
+	idx, _, err := BuildAGCCollectionIndex(rootURLFor, nodes, metadataURL)
 	if err != nil {
 		return nil, err
 	}
 	if err := writeIndexCache(cached, idx, source); err != nil {
 		return nil, err
 	}
-	return idx, nil
-}
-
-// FetchAGCIndex returns the AGC batch index for an OSF node, mirroring
-// FetchIndex: a cached TSV is reused while younger than CacheMaxAge and while
-// its source marker still matches rootURL, otherwise the node's agc_batches/
-// folder is crawled and the result written atomically to
-// <cacheDir>/atb_agc_files.tsv (alongside a refreshed marker). rootURL is the
-// node's osfstorage listing (build it with sources.OSFNodeFilesURL); it is a
-// parameter so the crawl is testable against a local server. nodeID is stamped
-// onto every entry's ProjectID. Set force=true to bypass a fresh cache.
-func FetchAGCIndex(cacheDir, rootURL, nodeID string, force bool) (*Index, error) {
-	if err := os.MkdirAll(cacheDir, 0755); err != nil {
-		return nil, fmt.Errorf("create cache dir: %w", err)
-	}
-	cached := filepath.Join(cacheDir, sources.AGCIndexFilename)
-
-	if !force && agcCacheFresh(cached, rootURL) {
-		f, err := os.Open(cached)
-		if err != nil {
-			return nil, fmt.Errorf("open cached AGC index: %w", err)
-		}
-		defer f.Close()
-		return ParseIndex(f)
-	}
-
-	idx, err := CrawlAGCIndex(rootURL, nodeID)
-	if err != nil {
-		return nil, err
-	}
-	if err := writeIndexCache(cached, idx, rootURL); err != nil {
-		return nil, err
-	}
-
 	return idx, nil
 }

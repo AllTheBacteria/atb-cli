@@ -15,11 +15,12 @@ sample_accession column, or one accession per line; - for stdin), or piped
 stdin. Batches named by the map but not yet listed in the index are reported as
 "not yet available" while the collection is still being published.
 
-By species (--species "Escherichia coli"): every batch named
-<Species>_global_ordered_* is downloaded and extracted whole, with no
-sample->archive map needed. Both modes share the AGC batch index, which by
-default is crawled from the full OSF collection and cached (or read from a local
---agc-index file). This is the bulk "give me all of species X" path.
+By species (--species "Escherichia coli"): every batch whose species column in
+the index matches is downloaded and extracted whole, with no sample->archive map
+needed. Both modes share the AGC batch index, which by default is crawled from
+the full OSF collection and joined with the batch metadata for the species
+column, then cached (or read from a local --agc-index file). This is the bulk
+"give me all of species X" path.
 
 Run 'atb agc install' once to install the agc binary. By default each sample is
 written to <output-dir>/<accession>.fa; use --combine to stream everything to one
@@ -52,7 +53,7 @@ atb agc download [accession...] [flags]
 ### Options
 
 ```
-      --agc-index string     local AGC batch index TSV; the default crawls the full OSF collection (or the published index with --osf-node)
+      --agc-index string     local AGC batch index TSV; the default downloads the published index or crawls the full OSF collection
       --archive-dir string   directory to cache .agc archives (default <data-dir>/agc)
       --combine              write all samples to one stream/file instead of per-sample files
       --dry-run              resolve and list archives without downloading or extracting

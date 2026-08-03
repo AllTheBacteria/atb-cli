@@ -111,7 +111,7 @@ func TestBuildDownloadTasksUsesRefs(t *testing.T) {
 		},
 	}
 
-	tasks, urlToArchive := buildDownloadTasks(archives, spec)
+	tasks, urlToArchive, _ := buildDownloadTasks(archives, spec)
 	if len(tasks) != 2 {
 		t.Fatalf("got %d tasks, want 2", len(tasks))
 	}
@@ -152,6 +152,40 @@ func TestBuildDownloadTasksUsesRefs(t *testing.T) {
 	}
 	if urlToArchive[legacyTask.URL] != "legacy_batch" {
 		t.Errorf("urlToArchive[%q] = %q, want legacy_batch", legacyTask.URL, urlToArchive[legacyTask.URL])
+	}
+}
+
+func TestBuildDownloadTasksFailClosed(t *testing.T) {
+	spec := FetchSpec{
+		Refs: map[string]ArchiveRef{
+			"batch.0001": {Name: "batch.0001", URL: "https://osf.io/download/aaa/", MD5: "m1"},
+		},
+		// BaseURL empty: a batch with no ref and no base URL is unresolved.
+	}
+	tasks, urlToArchive, unresolved := buildDownloadTasks([]string{"batch.0001", "batch.0002"}, spec)
+
+	if len(tasks) != 1 {
+		t.Fatalf("tasks: got %d, want 1", len(tasks))
+	}
+	if tasks[0].URL != "https://osf.io/download/aaa/" || tasks[0].Filename != "batch.0001.agc" || tasks[0].MD5 != "m1" {
+		t.Errorf("task0: got %+v", tasks[0])
+	}
+	if urlToArchive["https://osf.io/download/aaa/"] != "batch.0001" {
+		t.Errorf("urlToArchive missing batch.0001")
+	}
+	if len(unresolved) != 1 || unresolved[0] != "batch.0002" {
+		t.Errorf("unresolved: got %v, want [batch.0002]", unresolved)
+	}
+}
+
+func TestBuildDownloadTasksBaseURLFallback(t *testing.T) {
+	spec := FetchSpec{BaseURL: "https://host/files="}
+	tasks, _, unresolved := buildDownloadTasks([]string{"batch.0003"}, spec)
+	if len(unresolved) != 0 {
+		t.Fatalf("unresolved: got %v, want none", unresolved)
+	}
+	if len(tasks) != 1 || tasks[0].URL != "https://host/files=batch.0003.agc" {
+		t.Errorf("task0: got %+v", tasks)
 	}
 }
 
@@ -204,7 +238,7 @@ func TestFetchGenomesPerSample(t *testing.T) {
 	outDir := filepath.Join(base, "out")
 
 	groups := map[string][]string{"batch_a": {"ACC1", "ACC2"}}
-	res, err := FetchGenomes(groups, FetchSpec{OutputDir: outDir, ArchiveDir: archiveDir, Parallel: 1})
+	res, err := FetchGenomes(groups, FetchSpec{OutputDir: outDir, ArchiveDir: archiveDir, BaseURL: "https://archive.example/agc/", Parallel: 1})
 	if err != nil {
 		t.Fatalf("FetchGenomes: %v", err)
 	}
@@ -230,7 +264,7 @@ func TestFetchGenomesCombinePreservesOrder(t *testing.T) {
 
 	var combined strings.Builder
 	groups := map[string][]string{"batch_a": {"ACC1", "ACC2"}}
-	res, err := FetchGenomes(groups, FetchSpec{Combine: true, Combined: &combined, ArchiveDir: archiveDir, Parallel: 1})
+	res, err := FetchGenomes(groups, FetchSpec{Combine: true, Combined: &combined, ArchiveDir: archiveDir, BaseURL: "https://archive.example/agc/", Parallel: 1})
 	if err != nil {
 		t.Fatalf("FetchGenomes: %v", err)
 	}
@@ -251,7 +285,7 @@ func TestFetchGenomesContinuesOnError(t *testing.T) {
 	outDir := filepath.Join(base, "out")
 
 	groups := map[string][]string{"batch_a": {"ACC1", "BAD"}}
-	res, err := FetchGenomes(groups, FetchSpec{OutputDir: outDir, ArchiveDir: archiveDir, Parallel: 1})
+	res, err := FetchGenomes(groups, FetchSpec{OutputDir: outDir, ArchiveDir: archiveDir, BaseURL: "https://archive.example/agc/", Parallel: 1})
 	if err != nil {
 		t.Fatalf("FetchGenomes: %v", err)
 	}
@@ -281,7 +315,7 @@ func TestFetchGenomesCombineNoDuplicateOnPartialFailure(t *testing.T) {
 	// exactly once and only BAD must fail. The old try-batch-then-fallback
 	// design wrote ACC1 twice.
 	groups := map[string][]string{"batch_a": {"ACC1", "BAD"}}
-	res, err := FetchGenomes(groups, FetchSpec{Combine: true, Combined: &combined, ArchiveDir: archiveDir, Parallel: 1})
+	res, err := FetchGenomes(groups, FetchSpec{Combine: true, Combined: &combined, ArchiveDir: archiveDir, BaseURL: "https://archive.example/agc/", Parallel: 1})
 	if err != nil {
 		t.Fatalf("FetchGenomes: %v", err)
 	}
@@ -374,7 +408,7 @@ func TestFetchGenomesWholeArchiveCombine(t *testing.T) {
 	var combined strings.Builder
 	// An empty accession slice means "extract the whole batch" (Mode A by-species).
 	groups := map[string][]string{"batch_a": nil}
-	res, err := FetchGenomes(groups, FetchSpec{Combine: true, Combined: &combined, ArchiveDir: archiveDir, Parallel: 1})
+	res, err := FetchGenomes(groups, FetchSpec{Combine: true, Combined: &combined, ArchiveDir: archiveDir, BaseURL: "https://archive.example/agc/", Parallel: 1})
 	if err != nil {
 		t.Fatalf("FetchGenomes: %v", err)
 	}
@@ -395,7 +429,7 @@ func TestFetchGenomesWholeArchivePerBatchFile(t *testing.T) {
 	outDir := filepath.Join(base, "out")
 
 	groups := map[string][]string{"batch_a": nil}
-	res, err := FetchGenomes(groups, FetchSpec{OutputDir: outDir, ArchiveDir: archiveDir, Parallel: 1})
+	res, err := FetchGenomes(groups, FetchSpec{OutputDir: outDir, ArchiveDir: archiveDir, BaseURL: "https://archive.example/agc/", Parallel: 1})
 	if err != nil {
 		t.Fatalf("FetchGenomes: %v", err)
 	}
@@ -420,7 +454,7 @@ func TestFetchGenomesWholeArchiveExtractFailure(t *testing.T) {
 	outDir := filepath.Join(base, "out")
 
 	groups := map[string][]string{"FAILCOL_batch": nil}
-	res, err := FetchGenomes(groups, FetchSpec{OutputDir: outDir, ArchiveDir: archiveDir, Parallel: 1})
+	res, err := FetchGenomes(groups, FetchSpec{OutputDir: outDir, ArchiveDir: archiveDir, BaseURL: "https://archive.example/agc/", Parallel: 1})
 	if err != nil {
 		t.Fatalf("FetchGenomes: %v", err)
 	}

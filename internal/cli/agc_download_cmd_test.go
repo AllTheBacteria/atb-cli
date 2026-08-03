@@ -21,7 +21,7 @@ func writeBatchIndex(t *testing.T, batches ...string) string {
 	t.Helper()
 	tsv := "project\tproject_id\tfilename\turl\tmd5\tsize_mb\n"
 	for _, name := range batches {
-		tsv += name + "\t6g8by\t" + name + ".agc\thttps://osf.io/download/" + name + "/\tmd5" + name + "\t1.000000\n"
+		tsv += name + "\tjmeqg\t" + name + ".agc\thttps://osf.io/download/" + name + "/\tmd5" + name + "\t1.000000\n"
 	}
 	path := filepath.Join(t.TempDir(), "idx.tsv")
 	if err := os.WriteFile(path, []byte(tsv), 0o644); err != nil {
@@ -85,9 +85,9 @@ func TestTopLevelFetchGenomesRemoved(t *testing.T) {
 // reuses the master-index columns so osf.ParseIndex round-trips it. Tests feed it
 // via --agc-index to exercise Mode A without any network I/O.
 const agcIndexTSV = "project\tproject_id\tfilename\turl\tmd5\tsize_mb\n" +
-	"Acinetobacter_baylyi\tz7q5y\tAcinetobacter_baylyi_global_ordered_0001.agc\thttps://osf.io/download/aaa/\tmd5aaa\t3.890000\n" +
-	"Acinetobacter_baylyi\tz7q5y\tAcinetobacter_baylyi_global_ordered_0002.agc\thttps://osf.io/download/bbb/\tmd5bbb\t4.100000\n" +
-	"Streptococcus_suis_AA\tz7q5y\tStreptococcus_suis_AA_global_ordered_0001.agc\thttps://osf.io/download/ccc/\tmd5ccc\t10.400000\n"
+	"Acinetobacter_baylyi\t4jq8u\tAcinetobacter_baylyi_global_ordered_0001.agc\thttps://osf.io/download/aaa/\tmd5aaa\t3.890000\n" +
+	"Acinetobacter_baylyi\t4jq8u\tAcinetobacter_baylyi_global_ordered_0002.agc\thttps://osf.io/download/bbb/\tmd5bbb\t4.100000\n" +
+	"Streptococcus_suis_AA\t4jq8u\tStreptococcus_suis_AA_global_ordered_0001.agc\thttps://osf.io/download/ccc/\tmd5ccc\t10.400000\n"
 
 func writeAGCIndex(t *testing.T) string {
 	t.Helper()
@@ -96,68 +96,6 @@ func writeAGCIndex(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return path
-}
-
-// TestUseHostedAGCIndex locks the source-selection gate: a hosted index is used
-// only when there is no local override, a URL is configured, and the node is the
-// default. An explicit --osf-node override must still route to a live crawl.
-func TestUseHostedAGCIndex(t *testing.T) {
-	const url = "https://osf.io/download/xyz/"
-	cases := []struct {
-		name      string
-		localPath string
-		indexURL  string
-		node      string
-		want      bool
-	}{
-		{"hosted, default node", "", url, sources.AGCTestNodeID, true},
-		{"local path wins", "/tmp/x.tsv", url, sources.AGCTestNodeID, false},
-		{"no hosted url configured", "", "", sources.AGCTestNodeID, false},
-		{"overridden node crawls", "", url, "othernode", false},
-	}
-	for _, tc := range cases {
-		if got := useHostedAGCIndex(tc.localPath, tc.indexURL, tc.node); got != tc.want {
-			t.Errorf("%s: useHostedAGCIndex(%q,%q,%q) = %v, want %v",
-				tc.name, tc.localPath, tc.indexURL, tc.node, got, tc.want)
-		}
-	}
-}
-
-// TestLoadAGCIndexPrefersHostedURL verifies the wiring: with a hosted URL and the
-// default node, loadAGCIndex downloads the published TSV; a local --agc-index
-// path still wins over it.
-func TestLoadAGCIndexPrefersHostedURL(t *testing.T) {
-	var hits int
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hits++
-		w.Write([]byte(agcIndexTSV))
-	}))
-	defer server.Close()
-
-	dir := t.TempDir()
-	idx, err := loadAGCIndex("", server.URL, dir, sources.AGCTestNodeID, false)
-	if err != nil {
-		t.Fatalf("loadAGCIndex (hosted): %v", err)
-	}
-	if len(idx.Entries) != 3 {
-		t.Fatalf("hosted: got %d entries, want 3", len(idx.Entries))
-	}
-	if hits != 1 {
-		t.Errorf("hosted: expected 1 download, got %d server hits", hits)
-	}
-
-	local := writeAGCIndex(t)
-	hitsBefore := hits
-	idx2, err := loadAGCIndex(local, server.URL, dir, sources.AGCTestNodeID, false)
-	if err != nil {
-		t.Fatalf("loadAGCIndex (local): %v", err)
-	}
-	if len(idx2.Entries) != 3 {
-		t.Fatalf("local: got %d entries, want 3", len(idx2.Entries))
-	}
-	if hits != hitsBefore {
-		t.Errorf("local path made %d extra download(s), want 0", hits-hitsBefore)
-	}
 }
 
 func TestAGCDownloadSpeciesDryRun(t *testing.T) {
@@ -356,15 +294,15 @@ func TestAGCDownloadDedupesArgsAndFile(t *testing.T) {
 	}
 }
 
-// agcCollectionTSV is a 6-column batch index whose rows sit on collection nodes
-// (project_id = a collection node id), so PartForNode yields a real part.
+// agcCollectionTSV is a 6-column collection-index TSV whose project_id column
+// holds a collection node id; it is shared by the download and locate tests.
 const agcCollectionTSV = "project\tproject_id\tfilename\turl\tmd5\tsize_mb\n" +
-	"Escherichia_coli\t6g8by\tEscherichia_coli_global_ordered_0001.agc\thttps://osf.io/download/ec1/\tmd5ec\t1.000000\n" +
-	"Salmonella_enterica\txrzub\tSalmonella_enterica_global_ordered_0072.agc\thttps://osf.io/download/se72/\tmd5se\t2.000000\n"
+	"Escherichia_coli\tjmeqg\tEscherichia_coli_global_ordered_0001.agc\thttps://osf.io/download/ec1/\tmd5ec\t1.000000\n" +
+	"Salmonella_enterica\tkzcnr\tSalmonella_enterica_global_ordered_0072.agc\thttps://osf.io/download/se72/\tmd5se\t2.000000\n"
 
 // seedAGCCollectionIndex writes a warm collection-index cache under <dataDir>/agc
-// so loadAGCBatchIndex's default (no --osf-node) path is a cache hit with no
-// network I/O. The .source sidecar must match the node set's marker.
+// so loadAGCBatchIndex's default path is a cache hit with no network I/O. The
+// .source sidecar must match the node set's marker.
 func seedAGCCollectionIndex(t *testing.T, dataDir, tsv string) {
 	t.Helper()
 	cacheDir := filepath.Join(dataDir, sources.AGCArchiveSubdir)
@@ -386,9 +324,9 @@ func TestLoadAGCBatchIndexDefaultUsesCollectionCache(t *testing.T) {
 	dir := t.TempDir()
 	cacheDir := filepath.Join(dir, sources.AGCArchiveSubdir)
 	seedAGCCollectionIndex(t, dir, agcCollectionTSV)
-	// No --osf-node override and no local path: must serve the seeded collection
-	// cache with zero network I/O (a real crawl would hit api.osf.io).
-	idx, err := loadAGCBatchIndex("", sources.AGCIndexURL, cacheDir, "", false)
+	// No local path: must serve the seeded collection cache with zero network I/O
+	// (a real crawl would hit api.osf.io).
+	idx, err := loadAGCBatchIndex("", sources.AGCIndexURL, cacheDir, false)
 	if err != nil {
 		t.Fatalf("loadAGCBatchIndex (default): %v", err)
 	}
@@ -399,29 +337,12 @@ func TestLoadAGCBatchIndexDefaultUsesCollectionCache(t *testing.T) {
 
 func TestLoadAGCBatchIndexLocalPathWins(t *testing.T) {
 	local := writeAGCIndex(t) // existing helper: 3-row TSV
-	idx, err := loadAGCBatchIndex(local, sources.AGCIndexURL, t.TempDir(), "", false)
+	idx, err := loadAGCBatchIndex(local, sources.AGCIndexURL, t.TempDir(), false)
 	if err != nil {
 		t.Fatalf("loadAGCBatchIndex (local): %v", err)
 	}
 	if len(idx.Entries) != 3 {
 		t.Fatalf("local path: got %d, want 3", len(idx.Entries))
-	}
-}
-
-func TestLoadAGCBatchIndexExplicitNodeUsesHosted(t *testing.T) {
-	var hits int
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hits++
-		w.Write([]byte(agcIndexTSV))
-	}))
-	defer server.Close()
-	// Explicit --osf-node = the default test node, with a hosted URL: hosted path.
-	idx, err := loadAGCBatchIndex("", server.URL, t.TempDir(), sources.AGCTestNodeID, false)
-	if err != nil {
-		t.Fatalf("loadAGCBatchIndex (explicit node): %v", err)
-	}
-	if len(idx.Entries) != 3 || hits != 1 {
-		t.Fatalf("explicit node should download hosted TSV once: entries=%d hits=%d", len(idx.Entries), hits)
 	}
 }
 
@@ -466,7 +387,7 @@ func TestAGCDownloadAccessionOverOSF(t *testing.T) {
 	// A local batch index whose single row's URL is the fake server (md5 empty
 	// skips verification). This is the bridge: accession -> batch -> index URL.
 	idxTSV := "project\tproject_id\tfilename\turl\tmd5\tsize_mb\n" +
-		"Escherichia_coli\t6g8by\tEscherichia_coli_global_ordered_0001.agc\t" + srv.URL + "/arch\t\t1.000000\n"
+		"Escherichia_coli\tjmeqg\tEscherichia_coli_global_ordered_0001.agc\t" + srv.URL + "/arch\t\t1.000000\n"
 	idxPath := filepath.Join(t.TempDir(), "idx.tsv")
 	if err := os.WriteFile(idxPath, []byte(idxTSV), 0o644); err != nil {
 		t.Fatal(err)
