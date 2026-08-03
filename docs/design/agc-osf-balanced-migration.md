@@ -234,7 +234,7 @@ the upload.
 ## 7. Out of scope
 
 - `atb fetch-annotations` over `.bakpack` annotations
-  ([`agc-annotations-bakpack.md`](./agc-annotations-bakpack.md)). The genome
+  (see `agc-annotations-bakpack.md`). The genome
   retrieval it depends on has landed, so it is unblocked, but it is a separate
   feature tracked in its own ADR.
 - Carrying `nb_genomes` in the index (3.6) and any change to the accession-map
