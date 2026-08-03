@@ -48,11 +48,18 @@ The previous data encoded the species in the batch filename
 batches are numbered and carry no species in the filename
 (`atb.assembly.202505_all.batch.0021.agc`).
 
-The species survives only in the batch-metadata `old_name` column, in two forms:
+The species survives only in the batch-metadata `old_name` column, in three forms
+(distinct-prefix counts confirmed against `8y9r2`'s 1,268 rows on 2026-08-01):
 
-- Major species: `<Species>_global_ordered.partNNN.agc`
+- Major species (580 batches): `<Species>_global_ordered.partNNN.agc`
   (for example `Acinetobacter_baumannii_global_ordered.part003.agc`).
-- Remainder tier: `unknown.partNNN.agc` (the old `subthreshold_remainder`).
+- Remainder tier (437 batches): `unknown.partNNN.agc` (the old `subthreshold_remainder`).
+- Mixed tier (251 batches): `mixed_species.partNNN.agc`.
+
+A single rule parses all three: strip `.agc`, cut at the first `.part`, then remove a
+trailing `_global_ordered`. This yields the real species for the major form and the
+sentinel tokens `unknown` / `mixed_species` for the other two, and was validated to
+return a non-empty value for every one of the 1,268 batches.
 
 Consequence: species-to-batch is no longer derivable from a batch filename. It is
 recoverable only by joining the batch metadata. The old accession-to-batch map
@@ -146,11 +153,17 @@ already live) and records the new `/download/<guid>/` URL in `sources.AGCIndexUR
   decompressed on read. Confirm or adjust `ParseMap` field splitting so the map's
   delimiter (whitespace) is accepted; column 1 is the accession, column 2 the batch
   name without extension.
-- `internal/osf/agc_index.go` (`SpeciesFromArchive`): derive the species from the
-  `old_name` forms `<Species>_global_ordered.partNNN` and `unknown.partNNN`
-  (cut at the first of `_global_ordered` or `.part`; `unknown` maps to `unknown`).
-  Add the build helper that crawls the collection and joins the batch metadata
-  (3.2). This function runs at publish time only.
+- `internal/osf/agc_index.go`: rename `SpeciesFromArchive` to `SpeciesFromOldName`
+  and reimplement it for the three `old_name` forms (1.1) with the single rule:
+  strip `.agc`, cut at the first `.part`, then trim a trailing `_global_ordered`.
+  It now parses the metadata `old_name`, not the batch filename, so
+  `parseAGCNodePage` stops setting `Project` (the numbered filename carries no
+  species); the join fills it. Add `ParseBatchMetadata` / `FetchBatchMetadata`
+  (read `8y9r2`, gunzip, map `batch_name` to `old_name`) and
+  `BuildAGCCollectionIndex` (crawl the collection, join on `batch_name`, set the
+  species, and return the batches left unmatched). The join runs both at publish
+  time (`atb agc index`) and in the crawl fallback (`FetchAGCCollection`); the
+  publish command fails closed on any unmatched batch, the fallback tolerates it.
 - `internal/agc/locate.go` and `internal/cli/agc_locate_cmd.go`: replace the
   node-tier `Part` field with the **species** and **node** taken from the batch's
   index entry (`Project` and `ProjectID`). Drop the `PartForNode` dependency.
@@ -170,7 +183,7 @@ The finalized data maps onto the current `osf.ParseIndex` and
 
 | Column | Source |
 |--------|--------|
-| `project` | species, from `SpeciesFromArchive(old_name)` |
+| `project` | species, from `SpeciesFromOldName(old_name)` (join on `batch_name`) |
 | `project_id` | node id (`4jq8u`/`jmeqg`/`kzcnr`) |
 | `filename` | `batch_name` (`atb.assembly.202505_all.batch.NNNN.agc`) |
 | `url` | OSF download URL from the node listing |
@@ -211,8 +224,10 @@ Running impact analysis (`gitnexus_impact`) before editing each symbol, and
   `project_id`, and species in `project`.
 - Update unit tests that assert node ids, the folder name, or the naming
   convention.
-- Add `SpeciesFromArchive` cases for `<Species>_global_ordered.partNNN` and
-  `unknown.partNNN`, and a gzip map-parse case in `resolve_test.go`.
+- Add `SpeciesFromOldName` cases for all three `old_name` forms
+  (`<Species>_global_ordered.partNNN`, `unknown.partNNN`, `mixed_species.partNNN`),
+  a `ParseBatchMetadata` / `BuildAGCCollectionIndex` join test, and a gzip
+  map-parse case in `resolve_test.go`.
 - Live e2e smoke against the finalized OSF nodes: `atb agc locate <accession>`,
   `atb agc download --species <species>`, and one by-accession download, each
   md5-verified.
