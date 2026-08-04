@@ -44,9 +44,10 @@ stdin. Batches named by the map but not yet listed in the index are reported as
 
 By species (--species "Escherichia coli"): every batch whose species column in
 the index matches is downloaded and extracted whole, with no sample->archive map
-needed. Both modes share the AGC batch index, which by default is crawled from
-the full OSF collection and joined with the batch metadata for the species
-column, then cached (or read from a local --agc-index file). This is the bulk
+needed. Both modes share the AGC batch index, which by default is the single
+published index TSV downloaded from OSF, or crawled from the full OSF
+collection and joined with the batch metadata when no published index is set,
+then cached (or read from a local --agc-index file). This is the bulk
 "give me all of species X" path.
 
 Run 'atb agc install' once to install the agc binary. By default each sample is

@@ -34,7 +34,7 @@ func TestAGCLocateTSVColumns(t *testing.T) {
 func TestAGCLocateTSV(t *testing.T) {
 	dir := t.TempDir()
 	seedArchiveMap(t, dir, "ACC1 Escherichia_coli_global_ordered_0001\nACC2 Ghost_global_ordered_9999\n")
-	seedAGCCollectionIndex(t, dir, agcCollectionTSV) // lists the E. coli batch on jmeqg
+	seedAGCDefaultIndex(t, dir, agcCollectionTSV) // lists the E. coli batch on jmeqg
 
 	stdout, _, err := runCmd("agc", "locate", "--data-dir", dir, "ACC1", "ACC2", "ACC3")
 	if err != nil {
@@ -58,7 +58,7 @@ func TestAGCLocateTSV(t *testing.T) {
 func TestAGCLocateJSON(t *testing.T) {
 	dir := t.TempDir()
 	seedArchiveMap(t, dir, "ACC1 Escherichia_coli_global_ordered_0001\n")
-	seedAGCCollectionIndex(t, dir, agcCollectionTSV)
+	seedAGCDefaultIndex(t, dir, agcCollectionTSV)
 
 	stdout, _, err := runCmd("agc", "locate", "--data-dir", dir, "--format", "json", "ACC1")
 	if err != nil {
@@ -79,7 +79,7 @@ func TestAGCLocateJSON(t *testing.T) {
 func TestAGCLocateFromFile(t *testing.T) {
 	dir := t.TempDir()
 	seedArchiveMap(t, dir, "ACC1 Escherichia_coli_global_ordered_0001\n")
-	seedAGCCollectionIndex(t, dir, agcCollectionTSV)
+	seedAGCDefaultIndex(t, dir, agcCollectionTSV)
 
 	from := filepath.Join(t.TempDir(), "ids.txt")
 	if err := os.WriteFile(from, []byte("ACC1\n"), 0o644); err != nil {
