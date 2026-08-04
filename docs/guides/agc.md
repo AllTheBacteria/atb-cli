@@ -8,7 +8,7 @@ AllTheBacteria assemblies are distributed as **AGC** (Assembled Genome Compresso
 - **`atb agc install`** - fetch the upstream `agc` binary the others shell out to.
 
 !!! info "Availability"
-    The `atb agc` command group is new in **v0.18.0**; it is not in v0.17.x. The 0.18.0 line is currently in beta while the by-species workflow settles, so install it from the [v0.18.0-beta.2 pre-release](https://github.com/AllTheBacteria/atb-cli/releases/tag/v0.18.0-beta.2) (newer betas appear on the [releases page](https://github.com/AllTheBacteria/atb-cli/releases)). The installer's default stays on the latest stable until 0.18.0 is released.
+    The `atb agc` command group is new in **v0.18.0**; it is not in v0.17.x. Install or upgrade to the [latest release](https://github.com/AllTheBacteria/atb-cli/releases/latest).
 
 !!! note "Which command do I want?"
     Reach for **`atb agc download`** to get genomes by sample accession or by species - it handles resolution, download, and extraction. Drop down to **`atb agc ls`/`info`/`get`** only when you already have a local `.agc` file, or to **`atb agc index`** when you want to (re)generate the by-species index. All shell out to the upstream `agc` binary, so install it first.
