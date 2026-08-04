@@ -142,11 +142,10 @@ const OSFAPIBase = "https://api.osf.io/v2"
 const AGCIndexFilename = "atb_agc_files.tsv"
 
 // AGCIndexURL is the OSF /download/ URL of the published combined AGC index TSV
-// (crawl + metadata join, produced by `atb agc index`). Empty means no hosted
-// index is published yet: the runtime falls back to crawling the collection nodes
-// and joining the metadata on demand. Set this to the hosted TSV's /download/
-// URL once it is uploaded.
-const AGCIndexURL = ""
+// (crawl + metadata join, produced by `atb agc index`). When set, the runtime
+// downloads this single published TSV; an empty value falls back to crawling the
+// collection nodes and joining the metadata on demand.
+const AGCIndexURL = "https://osf.io/download/6a719381a2e9e3d202b91f7d/"
 
 // OSFNodeFilesURL returns the osfstorage root listing URL for an OSF node, the
 // entry point for crawling its folders.

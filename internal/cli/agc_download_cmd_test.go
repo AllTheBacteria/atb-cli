@@ -300,10 +300,11 @@ const agcCollectionTSV = "project\tproject_id\tfilename\turl\tmd5\tsize_mb\n" +
 	"Escherichia_coli\tjmeqg\tEscherichia_coli_global_ordered_0001.agc\thttps://osf.io/download/ec1/\tmd5ec\t1.000000\n" +
 	"Salmonella_enterica\tkzcnr\tSalmonella_enterica_global_ordered_0072.agc\thttps://osf.io/download/se72/\tmd5se\t2.000000\n"
 
-// seedAGCCollectionIndex writes a warm collection-index cache under <dataDir>/agc
-// so loadAGCBatchIndex's default path is a cache hit with no network I/O. The
-// .source sidecar must match the node set's marker.
-func seedAGCCollectionIndex(t *testing.T, dataDir, tsv string) {
+// seedAGCIndexCache writes a warm AGC index cache under <dataDir>/agc with the
+// given source marker in the ".source" sidecar, so loadAGCBatchIndex serves it
+// with no network I/O. The marker must equal what the resolving path expects: the
+// hosted URL for the URL path, or CollectionCacheSource(nodes) for the crawl.
+func seedAGCIndexCache(t *testing.T, dataDir, tsv, marker string) {
 	t.Helper()
 	cacheDir := filepath.Join(dataDir, sources.AGCArchiveSubdir)
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
@@ -313,25 +314,61 @@ func seedAGCCollectionIndex(t *testing.T, dataDir, tsv string) {
 	if err := os.WriteFile(cached, []byte(tsv), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	marker := osf.CollectionCacheSource(sources.AGCCollectionNodes)
 	// ".source" mirrors osf's internal cache sidecar suffix.
 	if err := os.WriteFile(cached+".source", []byte(marker+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestLoadAGCBatchIndexDefaultUsesCollectionCache(t *testing.T) {
+// seedAGCDefaultIndex warms the cache for loadAGCBatchIndex's default path,
+// stamping the marker that path resolves to: the hosted URL when
+// sources.AGCIndexURL is set, else the collection-crawl marker.
+func seedAGCDefaultIndex(t *testing.T, dataDir, tsv string) {
+	t.Helper()
+	marker := sources.AGCIndexURL
+	if marker == "" {
+		marker = osf.CollectionCacheSource(sources.AGCCollectionNodes)
+	}
+	seedAGCIndexCache(t, dataDir, tsv, marker)
+}
+
+func TestLoadAGCBatchIndexEmptyURLUsesCollectionCache(t *testing.T) {
 	dir := t.TempDir()
 	cacheDir := filepath.Join(dir, sources.AGCArchiveSubdir)
-	seedAGCCollectionIndex(t, dir, agcCollectionTSV)
-	// No local path: must serve the seeded collection cache with zero network I/O
-	// (a real crawl would hit api.osf.io).
-	idx, err := loadAGCBatchIndex("", sources.AGCIndexURL, cacheDir, false)
+	// With no hosted index URL, loadAGCBatchIndex falls back to the collection
+	// crawl; a cache stamped with the collection marker serves it with zero
+	// network I/O (a real crawl would hit api.osf.io).
+	seedAGCIndexCache(t, dir, agcCollectionTSV, osf.CollectionCacheSource(sources.AGCCollectionNodes))
+	idx, err := loadAGCBatchIndex("", "", cacheDir, false)
 	if err != nil {
-		t.Fatalf("loadAGCBatchIndex (default): %v", err)
+		t.Fatalf("loadAGCBatchIndex (empty URL): %v", err)
 	}
 	if len(idx.Entries) != 2 {
 		t.Fatalf("got %d entries, want 2 from the seeded collection cache", len(idx.Entries))
+	}
+}
+
+// TestLoadAGCBatchIndexURLPathDownloads guards the hosted-index wiring: a
+// non-empty index URL must route through FetchAGCIndexFromURL (download the single
+// published TSV) rather than the collection crawl.
+func TestLoadAGCBatchIndexURLPathDownloads(t *testing.T) {
+	var hits int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		io.WriteString(w, agcCollectionTSV)
+	}))
+	defer srv.Close()
+
+	cacheDir := filepath.Join(t.TempDir(), sources.AGCArchiveSubdir)
+	idx, err := loadAGCBatchIndex("", srv.URL, cacheDir, false)
+	if err != nil {
+		t.Fatalf("loadAGCBatchIndex (URL path): %v", err)
+	}
+	if hits != 1 {
+		t.Fatalf("hosted index: %d downloads, want 1", hits)
+	}
+	if len(idx.Entries) != 2 {
+		t.Fatalf("got %d entries, want 2 from the served index", len(idx.Entries))
 	}
 }
 

@@ -2,6 +2,16 @@
 
 All notable changes to `atb-cli` are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [v0.18.1](https://github.com/allthebacteria/atb-cli/releases/tag/v0.18.1) - 2026-08-04
+
+### Changed
+
+- The default AGC batch index is now the single published index TSV downloaded
+  from OSF, instead of crawling the three balanced v202505 collection nodes and
+  joining the batch metadata at runtime. `atb agc download` and `atb agc locate`
+  load the index from one cached, md5-verified download by default;
+  `--agc-index <file>` still reads a local TSV.
+
 ## [v0.18.0](https://github.com/allthebacteria/atb-cli/releases/tag/v0.18.0) - 2026-08-03
 
 ### Added

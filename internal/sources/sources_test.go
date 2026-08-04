@@ -46,3 +46,12 @@ func TestAGCBatchMetadataURLPresent(t *testing.T) {
 		t.Errorf("AGCBatchMetadataURL: got %q", sources.AGCBatchMetadataURL)
 	}
 }
+
+func TestAGCIndexURLPublished(t *testing.T) {
+	if !strings.HasPrefix(sources.AGCIndexURL, "https://osf.io/download/") {
+		t.Errorf("AGCIndexURL should be a published OSF /download/ URL, got %q", sources.AGCIndexURL)
+	}
+	if !strings.HasSuffix(sources.AGCIndexURL, "/") {
+		t.Errorf("AGCIndexURL should end with a trailing slash, got %q", sources.AGCIndexURL)
+	}
+}
