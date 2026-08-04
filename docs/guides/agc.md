@@ -39,13 +39,14 @@ atb agc download --species "Mycoplasmoides pneumoniae" \
 atb agc download --species "Salmonella enterica" --dry-run
 ```
 
-The first by-species run builds the batch index (`atb_agc_files.tsv`) and caches it
-for 7 days. By default `atb` crawls the three OSF nodes that host the ATB v202505
-collection and joins every batch with its species from the batch metadata,
-combining the result into one index; a published combined index TSV is downloaded
-directly instead when one is configured. The cache records which source produced
-it, so a release that repoints the index refreshes your local copy automatically.
-Use `--refresh` to force a re-fetch of the index and re-download archives.
+The first by-species run fetches the batch index and caches it (as
+`atb_agc_files.tsv`) for 7 days. By default `atb` downloads the single published
+index TSV hosted on OSF; when no published index is configured it instead crawls
+the three OSF nodes that host the ATB v202505 collection and joins every batch
+with its species from the batch metadata, combining the result into one index.
+The cache records which source produced it, so a release that repoints the index
+refreshes your local copy automatically. Use `--refresh` to force a re-fetch of
+the index and re-download archives.
 
 !!! tip "Offline or pinned index"
     Pass a local index TSV with `--agc-index` to skip the network fetch entirely - useful for reproducible runs or air-gapped environments. Generate the file once with [`atb agc index`](#build-the-by-species-index):
@@ -98,7 +99,7 @@ Useful flags (both modes):
 | `-t`, `--threads N` | agc extraction threads (default: cores − 1) |
 | `-p`, `--parallel N` | Parallel archive downloads |
 | `--archive-dir DIR` | Where to cache `.agc` archives (default `<data-dir>/agc`) |
-| `--agc-index FILE` | Use a local batch index TSV instead of crawling the collection |
+| `--agc-index FILE` | Use a local batch index TSV instead of downloading or crawling the collection index |
 | `--refresh` | Re-download the index/map and archives even if cached |
 | `--dry-run` | Resolve and list archives without downloading or extracting |
 | `--keep-going` | Continue past unresolved or failed samples (on by default); still exits non-zero if any |
@@ -138,7 +139,7 @@ batches in total) and joins every batch with its species from the batch
 metadata, writing a **separate** index TSV - one row per `.agc` batch with its
 species, OSF download URL, MD5, and size. This is the file
 `atb agc download --species` searches. Generate it once and commit it for
-offline use, or let `atb agc download` crawl and cache it on demand.
+offline use, or let `atb agc download` fetch and cache it on demand.
 
 ```bash
 # Write the index to a file you can commit / pass back via --agc-index
