@@ -27,13 +27,13 @@ var (
 
 // RootCmd is the base command for atb.
 //
-// SilenceErrors leaves reporting to main, which prints the error after the
-// background update check has finished writing to stderr.
+// SilenceUsage keeps the usage block out of error output. Cobra reports the
+// error itself, including the --help hint it adds for an unknown command, so
+// main only turns a failure into an exit code.
 var RootCmd = &cobra.Command{
-	Use:           "atb",
-	Short:         "Query and download AllTheBacteria genomes",
-	SilenceUsage:  true,
-	SilenceErrors: true,
+	Use:          "atb",
+	Short:        "Query and download AllTheBacteria genomes",
+	SilenceUsage: true,
 }
 
 func init() {
@@ -73,11 +73,10 @@ func NewRootCmd(version string) *cobra.Command {
 	var localCfgFile, localDataDir string
 
 	root := &cobra.Command{
-		Use:           "atb",
-		Short:         "Query and download AllTheBacteria genomes",
-		SilenceUsage:  true,
-		SilenceErrors: true,
-		Version:       version,
+		Use:          "atb",
+		Short:        "Query and download AllTheBacteria genomes",
+		SilenceUsage: true,
+		Version:      version,
 	}
 
 	root.PersistentFlags().StringVar(&localCfgFile, "config", "", "config file (default $HOME/.atb/config.toml)")

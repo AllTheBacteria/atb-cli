@@ -2,6 +2,17 @@
 
 All notable changes to `atb-cli` are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Fixed
+
+- `atb <unknown-command>` no longer printed `Run 'atb --help' for usage.`, a
+  regression in v0.21.1. Cobra writes that hint from the same branch as the
+  error line, so silencing the line to remove the duplicate removed the hint
+  too. Cobra reports the error again and `main` only turns a failure into an
+  exit code, so the hint is back and the error is still printed once. The
+  `Did you mean this?` suggestions were never affected.
+
 ## [v0.21.1](https://github.com/allthebacteria/atb-cli/releases/tag/v0.21.1) - 2026-08-05
 
 ### Fixed
