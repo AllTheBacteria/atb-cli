@@ -1,5 +1,14 @@
 # AGC accession → batch search and selective extraction Implementation Plan
 
+> **Status (v0.18.1):** Implemented and officially released. `atb agc locate` and
+> accession-mode `atb agc download` shipped through the beta line and are now in the
+> current **v0.18.1** release (2026-08-04). All eight tasks below are complete; the
+> as-built code is reconciled in the design doc
+> ([`agc-osf-accession-search.md`](./agc-osf-accession-search.md)). The collection
+> layout has since moved to the balanced v202505 batches with a hosted-index default -
+> see [`agc-osf-balanced-migration.md`](./agc-osf-balanced-migration.md). This plan is
+> retained as the build record, not a live checklist.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Route `atb agc download` accession-mode onto the full OSF v202505 AGC collection and add a read-only `atb agc locate` search command, so users can find which batch holds an accession and extract only the samples they want.

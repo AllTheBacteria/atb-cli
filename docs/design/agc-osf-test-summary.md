@@ -11,6 +11,14 @@
 > as the original point-in-time record; the command and file names below describe
 > the pre-rename CLI.
 
+> **Update (v0.18.1):** What this summary delivered against the single `z7q5y` test
+> node has been superseded. atb now defaults to a hosted OSF index TSV over the
+> finalized balanced **v202505** collection (crawling its three OSF nodes is the
+> fallback), and accession-mode `atb agc download` plus the read-only `atb agc locate`
+> are officially released, current in **v0.18.1** (2026-08-04). See
+> [`agc-osf-balanced-migration.md`](./agc-osf-balanced-migration.md) for the current
+> design and [`agc-osf-accession-search.md`](./agc-osf-accession-search.md) for `locate`.
+
 ## Goal (met)
 
 Make `atb fetch-genomes` work **today** against the AGC test archives staged on
