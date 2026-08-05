@@ -2,7 +2,7 @@
 
 All notable changes to `atb-cli` are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [v0.21.1](https://github.com/allthebacteria/atb-cli/releases/tag/v0.21.1) - 2026-08-05
 
 ### Fixed
 
