@@ -14,14 +14,14 @@ import (
 
 func newDownloadCmd() *cobra.Command {
 	var (
-		fromFile  string
-		urlsFile  string
-		singleURL string
-		outputDir string
-		parallel  int
+		fromFile   string
+		urlsFile   string
+		singleURL  string
+		outputDir  string
+		parallel   int
 		maxSamples int
-		dryRun    bool
-		force     bool
+		dryRun     bool
+		force      bool
 	)
 
 	cmd := &cobra.Command{

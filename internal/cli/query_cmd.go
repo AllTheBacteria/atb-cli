@@ -14,8 +14,8 @@ import (
 
 	cols "github.com/allthebacteria/atb-cli/internal/columns"
 	idx "github.com/allthebacteria/atb-cli/internal/index"
-	pq "github.com/allthebacteria/atb-cli/internal/parquet"
 	"github.com/allthebacteria/atb-cli/internal/output"
+	pq "github.com/allthebacteria/atb-cli/internal/parquet"
 	"github.com/allthebacteria/atb-cli/internal/query"
 	"github.com/allthebacteria/atb-cli/internal/suggest"
 )
