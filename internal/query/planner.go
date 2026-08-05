@@ -30,6 +30,14 @@ var sylphFields = map[string]bool{
 	"Median_cov":          true,
 }
 
+var mlstFields = map[string]bool{
+	"mlst_scheme":  true,
+	"mlst_st":      true,
+	"mlst_status":  true,
+	"mlst_score":   true,
+	"mlst_alleles": true,
+}
+
 var enaFields = map[string]bool{
 	"country":             true,
 	"collection_date":     true,
@@ -52,7 +60,7 @@ func columnsContainAny(columns []string, fields map[string]bool) bool {
 }
 
 // Plan determines which parquet tables are needed based on filters and output columns.
-// Tables are returned in canonical order: assembly, checkm2, assembly_stats, sylph, run, ena_20250506.
+// Tables are returned in canonical order: assembly, checkm2, assembly_stats, sylph, mlst, run, ena_20250506.
 func Plan(filters Filters, columns []string) QueryPlan {
 	tables := []string{"assembly"}
 
@@ -66,6 +74,10 @@ func Plan(filters Filters, columns []string) QueryPlan {
 
 	if columnsContainAny(columns, sylphFields) {
 		tables = append(tables, "sylph")
+	}
+
+	if columnsContainAny(columns, mlstFields) {
+		tables = append(tables, "mlst")
 	}
 
 	if filters.NeedsENA() || columnsContainAny(columns, enaFields) {

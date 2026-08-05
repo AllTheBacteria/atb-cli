@@ -19,6 +19,8 @@ type sampleData struct {
 	assembly      pq.AssemblyRow
 	checkm2       *pq.CheckM2Row
 	assemblyStats *pq.AssemblyStatsRow
+	sylph         *pq.SylphRow
+	mlst          *pq.MLSTRow
 	ena           *pq.ENARow
 }
 
@@ -129,7 +131,59 @@ func Execute(dataDir string, filters Filters, columns []string) ([]ResultRow, er
 		}
 	}
 
-	// Step 5: join ENA if needed
+	// Step 5: join sylph if needed. sylph.parquet holds one row per species
+	// detected in a sample, so a sample has as many rows as species found in
+	// it. The row to join is the one whose Species is the species the sample
+	// was assigned; a sample with no such row keeps empty sylph columns. Where
+	// a sample has more than one matching row, the highest Taxonomic_abundance
+	// wins so the result does not depend on file order.
+	if tableSet["sylph"] {
+		sylphRows, err := pq.ReadFiltered[pq.SylphRow](
+			filepath.Join(dataDir, "sylph.parquet"),
+			func(row pq.SylphRow) bool {
+				sd, ok := lookup[row.SampleAccession]
+				return ok && sd.assembly.SylphSpecies == row.Species
+			},
+		)
+		if err != nil {
+			return nil, fmt.Errorf("reading sylph: %w", err)
+		}
+		for _, s := range sylphRows {
+			s := s
+			sd, ok := lookup[s.SampleAccession]
+			if !ok {
+				continue
+			}
+			if sd.sylph == nil || s.TaxonomicAbundance > sd.sylph.TaxonomicAbundance {
+				sd.sylph = &s
+			}
+		}
+	}
+
+	// Step 6: join mlst if needed. The mlst table keys on a "sample" column
+	// rather than "sample_accession", and holds at most one row per sample.
+	if tableSet["mlst"] {
+		mlstRows, err := pq.ReadFiltered[pq.MLSTRow](
+			filepath.Join(dataDir, "mlst.parquet"),
+			func(row pq.MLSTRow) bool {
+				_, ok := lookup[row.Sample]
+				return ok
+			},
+		)
+		if err != nil {
+			return nil, fmt.Errorf("reading mlst: %w", err)
+		}
+		for _, m := range mlstRows {
+			m := m
+			sd, ok := lookup[m.Sample]
+			if !ok {
+				continue
+			}
+			sd.mlst = &m
+		}
+	}
+
+	// Step 7: join ENA if needed
 	if tableSet["ena_20250506"] {
 		enaRows, err := pq.ReadAll[pq.ENARow](filepath.Join(dataDir, "ena_20250506.parquet"))
 		if err != nil {
@@ -197,14 +251,14 @@ func Execute(dataDir string, filters Filters, columns []string) ([]ResultRow, er
 		}
 	}
 
-	// Step 6: build result rows
+	// Step 8: build result rows
 	results := make([]ResultRow, 0, len(lookup))
 	for _, sd := range lookup {
 		row := buildRow(sd)
 		results = append(results, row)
 	}
 
-	// Step 7: filter to requested columns
+	// Step 9: filter to requested columns
 	if len(columns) > 0 {
 		colSet := make(map[string]bool, len(columns))
 		for _, c := range columns {
@@ -323,6 +377,21 @@ func buildRow(sd *sampleData) ResultRow {
 		row["shortest"] = strconv.FormatInt(sd.assemblyStats.Shortest, 10)
 		row["N50"] = strconv.FormatInt(sd.assemblyStats.N50, 10)
 		row["N90"] = strconv.FormatInt(sd.assemblyStats.N90, 10)
+	}
+
+	if sd.sylph != nil {
+		row["Adjusted_ANI"] = strconv.FormatFloat(sd.sylph.AdjustedANI, 'f', -1, 64)
+		row["Taxonomic_abundance"] = strconv.FormatFloat(sd.sylph.TaxonomicAbundance, 'f', -1, 64)
+		row["Sequence_abundance"] = strconv.FormatFloat(sd.sylph.SequenceAbundance, 'f', -1, 64)
+		row["Median_cov"] = strconv.FormatInt(sd.sylph.MedianCov, 10)
+	}
+
+	if sd.mlst != nil {
+		row["mlst_scheme"] = sd.mlst.Scheme
+		row["mlst_st"] = sd.mlst.ST
+		row["mlst_status"] = sd.mlst.Status
+		row["mlst_score"] = strconv.FormatInt(int64(sd.mlst.Score), 10)
+		row["mlst_alleles"] = sd.mlst.Alleles
 	}
 
 	if sd.ena != nil {
