@@ -8,6 +8,7 @@
         * [locate](atb_agc_locate.md)
         * [ls](atb_agc_ls.md)
     * [amr](atb_amr.md)
+    * [columns](atb_columns.md)
     * [config](atb_config.md)
         * [get](atb_config_get.md)
         * [init](atb_config_init.md)

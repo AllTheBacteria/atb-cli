@@ -12,6 +12,7 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
 
+	cols "github.com/allthebacteria/atb-cli/internal/columns"
 	idx "github.com/allthebacteria/atb-cli/internal/index"
 	pq "github.com/allthebacteria/atb-cli/internal/parquet"
 	"github.com/allthebacteria/atb-cli/internal/output"
@@ -75,6 +76,14 @@ func newQueryCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if cmd.Flags().NFlag() == 0 && len(args) == 0 {
 				return cmd.Help()
+			}
+
+			// Checked here, before the database is opened or offered for
+			// download, so a misspelt column costs nothing to find out about.
+			// The merged list is checked again below, once a filter file has
+			// had its say.
+			if err := cols.Validate(columns); err != nil {
+				return err
 			}
 
 			cfg, err := loadConfig()
@@ -176,6 +185,10 @@ func newQueryCmd() *cobra.Command {
 			}
 			if cmd.Flags().Changed("output") {
 				outCfg.Output = outputFile
+			}
+
+			if err := cols.Validate(outCfg.Columns); err != nil {
+				return err
 			}
 
 			// Try SQLite index first (much faster).

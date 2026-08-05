@@ -2,6 +2,33 @@
 
 All notable changes to `atb-cli` are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added
+
+- `atb columns` lists every column name `atb query --columns` accepts, grouped
+  by the table it comes from, with a note on each one the SQLite index cannot
+  answer. `--format tsv`, `csv` or `json` prints the same list for scripts. The
+  command reads no data, so it works before anything has been downloaded. The
+  Available columns page in the reference is generated from the same list.
+
+### Fixed
+
+- The `sylph` and `mlst` columns return data on the parquet path.
+  `Adjusted_ANI`, `Taxonomic_abundance`, `Sequence_abundance`, `Median_cov` and
+  the five `mlst_*` columns caused their parquet file to be read but were never
+  joined onto the result, so any query that could not be answered from the
+  SQLite index returned them as empty strings and exited 0.
+
+### Changed
+
+- An unrecognised `--columns` name is an error. `atb query` now exits 1 before
+  opening the index, naming the closest columns when any are close:
+  `unknown column "N5O" - did you mean "N50" or "N90"? Run 'atb columns' to
+  list all`. Names in a TOML filter file are checked the same way. Previously a
+  misspelt name produced a blank column and exit status 0, so a script passing
+  a name that is not a column will now fail where it used to appear to succeed.
+
 ## [v0.19.0](https://github.com/allthebacteria/atb-cli/releases/tag/v0.19.0) - 2026-08-05
 
 ### Added

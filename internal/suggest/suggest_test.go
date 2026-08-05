@@ -1,6 +1,7 @@
 package suggest
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -69,5 +70,60 @@ func TestSuggestRejectsOutOfDataset(t *testing.T) {
 	if len(got) != 0 {
 		t.Errorf("Suggest(%q) = %v, want no suggestions for an out-of-dataset name",
 			"Sulfolobus acidocaldarius", got)
+	}
+}
+
+func TestIdentifiersSuggestsShortNameTypo(t *testing.T) {
+	cols := []string{"N50", "N90", "total_length", "Contamination", "sample_accession"}
+
+	got := Identifiers("N5O", cols, 3)
+
+	if len(got) == 0 || got[0] != "N50" {
+		t.Errorf("Identifiers(%q) = %v, want %q first", "N5O", got, "N50")
+	}
+}
+
+func TestIdentifiersIsCaseInsensitive(t *testing.T) {
+	got := Identifiers("n50", []string{"N50", "N90"}, 3)
+
+	if len(got) == 0 || got[0] != "N50" {
+		t.Errorf("Identifiers(%q) = %v, want %q first", "n50", got, "N50")
+	}
+}
+
+func TestIdentifiersMatchesLongNameTypo(t *testing.T) {
+	got := Identifiers("Contaminaton", []string{"Contamination", "Completeness_General"}, 3)
+
+	if len(got) == 0 || got[0] != "Contamination" {
+		t.Errorf("Identifiers(%q) = %v, want %q first", "Contaminaton", got, "Contamination")
+	}
+}
+
+func TestIdentifiersMatchesGroupPrefix(t *testing.T) {
+	got := Identifiers("mlst", []string{"mlst_scheme", "mlst_st", "N50"}, 3)
+
+	if len(got) != 2 {
+		t.Fatalf("Identifiers(%q) = %v, want the two mlst columns", "mlst", got)
+	}
+	for _, name := range got {
+		if !strings.HasPrefix(name, "mlst_") {
+			t.Errorf("Identifiers(%q) returned %q, which is not an mlst column", "mlst", name)
+		}
+	}
+}
+
+func TestIdentifiersRejectsUnrelatedInput(t *testing.T) {
+	cols := []string{"N50", "N90", "total_length", "Contamination", "sample_accession"}
+
+	if got := Identifiers("xyzzy", cols, 3); len(got) != 0 {
+		t.Errorf("Identifiers(%q) = %v, want nothing: no column is close to it", "xyzzy", got)
+	}
+}
+
+func TestIdentifiersLimitsResults(t *testing.T) {
+	got := Identifiers("mlst", []string{"mlst_scheme", "mlst_st", "mlst_status", "mlst_score"}, 2)
+
+	if len(got) != 2 {
+		t.Errorf("Identifiers with n=2 returned %d results, want 2", len(got))
 	}
 }

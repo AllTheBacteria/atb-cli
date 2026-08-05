@@ -18,18 +18,19 @@ jobs:
         with:
           go-version: "1.25"
 
-      - name: Regenerate CLI reference
+      - name: Regenerate the reference
         env:
           XDG_DATA_HOME: ""
           ATB_DATA_DIR: ""
           ATB_DATADIR: ""
         run: make docs
 
-      - name: Fail if the CLI reference is stale
+      - name: Fail if the generated reference is stale
         run: |
-          if ! git diff --quiet -- docs/reference/cli; then
-            echo "::error::docs/reference/cli is out of date. Run 'make docs' and commit the result."
-            git --no-pager diff -- docs/reference/cli
+          generated="docs/reference/cli docs/reference/columns.md"
+          if ! git diff --quiet -- $generated; then
+            echo "::error::$generated is out of date. Run 'make docs' and commit the result."
+            git --no-pager diff -- $generated
             exit 1
           fi
 
