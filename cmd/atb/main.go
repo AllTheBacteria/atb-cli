@@ -1,8 +1,6 @@
 package main
 
 import (
-	"fmt"
-	"io"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -15,12 +13,12 @@ var version = "dev"
 
 func main() {
 	cli.RootCmd.Version = version
-	os.Exit(run(cli.RootCmd, os.Stderr))
+	os.Exit(run(cli.RootCmd))
 }
 
-// run executes root and returns the process exit code, reporting any error on
-// stderr.
-func run(root *cobra.Command, stderr io.Writer) int {
+// run executes root and returns the process exit code. Cobra has already
+// written the error to stderr by the time Execute returns.
+func run(root *cobra.Command) int {
 	err := root.Execute()
 
 	// Let the background update check finish saving state (up to 2s).
@@ -29,7 +27,6 @@ func run(root *cobra.Command, stderr io.Writer) int {
 	}
 
 	if err != nil {
-		fmt.Fprintln(stderr, "Error:", err)
 		return 1
 	}
 	return 0
