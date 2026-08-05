@@ -2,6 +2,16 @@
 
 All notable changes to `atb-cli` are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Fixed
+
+- Every error was printed twice. Cobra wrote the `Error: ...` line when a
+  command returned and `main` wrote the same sentence again, so one failure
+  looked like two. The error is now reported once, keeping the `Error: ` prefix
+  that separates it from the progress and warning output `atb` also writes to
+  stderr. Exit codes are unchanged.
+
 ## [v0.21.0](https://github.com/allthebacteria/atb-cli/releases/tag/v0.21.0) - 2026-08-05
 
 ### Added
