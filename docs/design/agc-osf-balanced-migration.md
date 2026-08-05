@@ -20,6 +20,20 @@
 
 ---
 
+> **As-built (v0.18.1):** This migration shipped as designed - the balanced v202505
+> collection, the hosted-index default with the three-node crawl as fallback, and the
+> v0.18.0 graduation all landed - with one deviation from the plan below: the combined
+> index was published to OSF node **`h7wzy`**, not **`z7q5y`** as §1, §3.2, §4 (step 3),
+> and §6 state. `h7wzy` is the primary ATB project node, which also hosts the parquet
+> metadata and sketchlib. The shipped `AGCIndexURL` (`sources.go:148`) is
+> `/download/6a719381a2e9e3d202b91f7d/` - node `h7wzy`, folder
+> `metadata_balanced_batches/atb_agc_files.tsv`, md5
+> `8aea3d79da3e2a0af10c9904d0c3a10f`, 1,268 batches. The source files `gtqrx` (map) and
+> `8y9r2` (batch metadata) are unaffected; only the combined index's home node differs.
+> Current authority: the OSF Link Registry in
+> [`../reference/data-sources.md`](../reference/data-sources.md) and the
+> [v0.18.1 smoke test](./agc-v0.18.1-smoke-test.md).
+
 ## 1. Context: what the collaborator shipped (verified against OSF)
 
 The finalized balanced ATB **v202505** AGC collection is published and its figures

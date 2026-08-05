@@ -1,8 +1,22 @@
 # Design: AGC accession → batch search and selective extraction over the full OSF collection
 
-- Date: 2026-07-10
-- Status: Approved (brainstorming), ready for implementation plan
+- Date: 2026-07-10 (reconciled with as-built code 2026-07-11)
+- Status: **Implemented and released** - `atb agc locate` and accession-mode
+  `atb agc download` shipped through the beta line and are now in the current
+  **v0.18.1** release (2026-08-04). The §5 component signatures were reconciled with
+  the code as merged at beta.3; §3 "Current state" is the pre-change baseline the
+  design started from, kept for context.
 - Scope: `internal/sources`, `internal/osf`, `internal/agc`, `internal/cli`, docs
+
+> **Update (v0.18.1):** Since this design was reconciled at beta.3, the collection was
+> finalized by the balanced-v202505 migration: the shipped collection nodes are
+> `4jq8u`/`jmeqg`/`kzcnr` (not the `6g8by`/`9fqeh`/`xrzub` preview nodes named in §4),
+> the folder is `agc_batches` (the `AGCArchivesFolder` constant now holds `agc_batches`,
+> not `agc_archives`), and the default index is a single hosted OSF TSV rather than a
+> live three-node crawl (which is now the fallback). The §4-§5 node IDs, folder names,
+> and loader details are the beta.3 as-built record; see
+> [`agc-osf-balanced-migration.md`](./agc-osf-balanced-migration.md) for the current
+> design.
 
 ## 1. Motivation
 
@@ -106,18 +120,21 @@ accession ──(map: atb202505_files_list)──▶ batch name ──(index: 3-
 - Add a multi-node crawl that, for each `AGCCollectionNodes` entry, resolves the
   `agc_archives/` folder (`findFolderURL`) and crawls it (`CrawlAGCNode`),
   stamping `ProjectID` with the node ID. Concatenate into one `osf.Index`.
-  Suggested signature: `CrawlAGCCollection(nodes []sources.AGCNode) (*Index, error)`.
-- Extend `FetchAGCIndex` to drive the multi-node crawl and cache the combined TSV
-  under `<data-dir>/agc/atb_agc_files.tsv` with the existing `.source` marker
+  As built: `CrawlAGCCollection(rootURLFor func(nodeID string) string, nodes []sources.AGCNode) (*Index, error)` -
+  the `rootURLFor` closure (`sources.OSFNodeFilesURL`) is injected so the crawl is testable.
+- A dedicated `FetchAGCCollection(cacheDir, rootURLFor, nodes, force)` drives the
+  multi-node crawl and caches the combined TSV under
+  `<data-dir>/agc/atb_agc_files.tsv` with the existing `.source` marker
   (source key = a stable digest of the node set, so changing the node list
-  invalidates the cache).
+  invalidates the cache). The single-node `FetchAGCIndex` stays for `--osf-node`.
 - Folder is chosen **per node**: collection nodes crawl `AGCArchivesFolder`
   (`agc_archives`); the legacy `z7q5y` node keeps `AGCBatchesFolder`
   (`agc_batches`) when reached via `--osf-node`.
-- `loadAGCIndex`/`useHostedAGCIndex` in `internal/cli` gain a default (no
-  `--osf-node`, no `--agc-index`) that returns the combined crawl; the single-node
-  hosted/crawl paths stay for explicit `--osf-node`. **Both** download modes call
-  this one loader, so `--species` and accession-mode see the same collection.
+- As built, `loadAGCBatchIndex` in `internal/cli` is the default dispatcher (no
+  `--osf-node`, no `--agc-index`): it returns the combined `FetchAGCCollection`
+  crawl, and delegates to the single-node `loadAGCIndex`/`useHostedAGCIndex` path
+  for an explicit `--osf-node`. **Both** download modes call this one loader, so
+  `--species` and accession-mode see the same collection.
 - No `Entry` schema change: `ProjectID` already carries the node; `part` is derived
   via `sources.PartForNode`. `SpeciesFromArchive` is unchanged.
 - Graceful partial availability: a node that is still uploading simply contributes
@@ -128,10 +145,13 @@ accession ──(map: atb202505_files_list)──▶ batch name ──(index: 3-
 - `FetchMap` downloads the artifact and caches it **as downloaded** (the ~11 MB
   zip) rather than the 148 MB expansion. Cache filename keyed to the artifact
   (e.g. `agc_file_list.txt.zip`), 7-day + `--refresh` semantics unchanged.
-- Introduce a reader that transparently decompresses: if the cached bytes are a
-  ZIP (magic `PK\x03\x04`), open the single entry via `archive/zip` and stream it;
-  otherwise read as plain text. This keeps `ParseMap` untouched and stays robust
-  if upstream later publishes the list uncompressed.
+- Introduce a reader that transparently decompresses: if the cached bytes start
+  with the ZIP magic `PK` (a 2-byte sniff, so a valid-but-empty `PK\x05\x06`
+  archive still routes to the zip reader and surfaces as an error instead of a
+  silently empty map), open the single entry via `archive/zip` and stream it;
+  otherwise read as plain text. The map's first column is always an accession,
+  never `PK`, so plain text stays unambiguous. This keeps `ParseMap` untouched and
+  stays robust if upstream later publishes the list uncompressed.
 - `ParseMap` and `ResolveArchives` are unchanged in behaviour (two-column,
   whitespace-delimited, exact accession lookup, order-preserving groups).
 - Scale note: `ParseMap` loads the full map into a `map[string]string`
@@ -177,8 +197,9 @@ input conventions. **Does not require the agc binary** and never downloads.
 - Default TSV columns: `accession`, `batch`, `part`. `json` additionally includes
   the resolved OSF `url`. Unresolved accessions print `batch = <unresolved>`;
   known-but-unavailable batches print `part = <not-yet-available>`.
-- Register in `newAGCCmd()`; document alongside `download` (the search half of the
-  same workflow).
+- As built, registered via `newAGCLocateCmd()` in the `agc` command group
+  (`agc_cmd.go`); documented alongside `download` (the search half of the same
+  workflow).
 
 ### 5.7 Extraction
 
@@ -190,7 +211,7 @@ requested samples via `agc getset`. It inherits OSF support from the bridge (5.4
 **`atb agc locate SAMEA2247573 --from ids.txt`**
 1. Gather accessions (args + `--from`/stdin), dedupe.
 2. `FetchMap` (zip-aware) → `ParseMap` → `ArchiveMap`.
-3. `FetchAGCIndex` (3-node crawl, cached) → `RefsFromIndex`.
+3. `FetchAGCCollection` (3-node crawl, cached) → `RefsFromIndex`.
 4. `ResolveArchives` → groups + unresolved; join with refs for part/URL.
 5. Print `accession, batch, part[, url]`.
 

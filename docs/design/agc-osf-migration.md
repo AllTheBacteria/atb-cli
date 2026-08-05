@@ -14,6 +14,15 @@
 > the original point-in-time record; the command and file names below describe the
 > pre-rename CLI.
 
+> **Update (v0.18.1):** The default AGC batch-index source has moved on from the
+> single `z7q5y` test node described here. atb now defaults to a hosted OSF index TSV
+> over the finalized balanced **v202505** collection (crawling its three OSF nodes is
+> the fallback; `--agc-index`/`--osf-node` override). Accession-mode `atb agc download`
+> and the read-only `atb agc locate` are officially released - graduated from preview
+> in v0.18.0 (2026-08-03), current in **v0.18.1** (2026-08-04). See
+> [`agc-osf-balanced-migration.md`](./agc-osf-balanced-migration.md) for the current
+> design and [`agc-osf-accession-search.md`](./agc-osf-accession-search.md) for `locate`.
+
 ---
 
 ## 1. Context

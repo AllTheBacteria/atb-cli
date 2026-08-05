@@ -4,6 +4,17 @@
 - **Branch:** `feat/agc-osf-test` (WIP — **do not merge to main**; no push/PR without confirmation)
 - **Status:** Design approved → implementation
 
+> **Update (v0.18.1):** This rename **shipped** and `atb agc download` is now
+> officially released - it graduated from preview in v0.18.0 (2026-08-03) and is
+> current in **v0.18.1** (2026-08-04, the Latest release). The "WIP / do not merge"
+> and "Branch" notes above are the original point-in-time record and no longer apply.
+> The `agc` group has since gained a `locate` subcommand and accession-mode download
+> over OSF, and the default batch index is the hosted OSF index TSV (crawling the
+> v202505 collection nodes is the fallback). See
+> [`agc-osf-balanced-migration.md`](./agc-osf-balanced-migration.md) for the current
+> design and [`agc-osf-accession-search.md`](./agc-osf-accession-search.md) for
+> `locate`. The surface table below predates `locate`.
+
 ## Problem
 
 The genome-retrieval surface mixed two vocabularies. `atb download` (released)
