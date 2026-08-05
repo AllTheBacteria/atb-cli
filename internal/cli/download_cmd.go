@@ -68,9 +68,12 @@ func newDownloadCmd() *cobra.Command {
 			}
 
 			if fromFile != "" {
-				extracted, err := parseCSVURLs(fromFile)
+				extracted, skipped, err := parseCSVURLs(fromFile)
 				if err != nil {
 					return fmt.Errorf("parsing --from file: %w", err)
+				}
+				if skipped > 0 {
+					fmt.Fprintf(os.Stderr, "Skipping %d row(s) with no assembly (aws_url is NA)\n", skipped)
 				}
 				urls = append(urls, extracted...)
 			}

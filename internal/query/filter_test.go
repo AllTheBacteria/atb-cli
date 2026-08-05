@@ -14,6 +14,8 @@ species_like = "Salmonella%"
 genus = "Salmonella"
 samples = ["SAMEA1", "SAMEA2"]
 sample_file = "/tmp/samples.txt"
+runs = ["ERR1", "SRR2"]
+run_file = "/tmp/runs.txt"
 hq_only = true
 min_completeness = 95.5
 max_contamination = 2.0
@@ -61,6 +63,12 @@ output = "results.tsv"
 	}
 	if f.SampleFile != "/tmp/samples.txt" {
 		t.Errorf("SampleFile: got %q, want %q", f.SampleFile, "/tmp/samples.txt")
+	}
+	if len(f.Runs) != 2 || f.Runs[0] != "ERR1" || f.Runs[1] != "SRR2" {
+		t.Errorf("Runs: got %v, want [ERR1 SRR2]", f.Runs)
+	}
+	if f.RunFile != "/tmp/runs.txt" {
+		t.Errorf("RunFile: got %q, want %q", f.RunFile, "/tmp/runs.txt")
 	}
 	if !f.HQOnly {
 		t.Error("HQOnly: expected true")

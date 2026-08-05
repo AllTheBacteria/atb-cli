@@ -2,6 +2,28 @@
 
 All notable changes to `atb-cli` are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added
+
+- `atb query --runs` and `--run-file` filter by sequencing run accession
+  (`ERR`/`SRR`/`DRR`). ATB is keyed by sample accession, so the runs are
+  resolved through the `run.parquet` mapping table before the query runs, and
+  the resolution is reported: `Resolved 6000 run accession(s) to 5981 sample
+  accession(s)`. A run that carries several samples contributes all of them.
+  Run accessions the table does not list are named in a warning; if none of
+  them resolve the query fails rather than returning every row. Runs and
+  `--samples` combine as a union. `run.parquet` is already a core table, so no
+  extra download is needed.
+
+### Fixed
+
+- `atb download --from` no longer tries to download samples that have no
+  assembly. Their `aws_url` is the literal string `NA` on 464,368 rows, which
+  was turned into a request for `.../NA.fa.gz`. Those rows are skipped and the
+  count is reported: `Skipping 1065 row(s) with no assembly (aws_url is NA)`.
+  Use `atb query --has-assembly` to leave them out of the results instead.
+
 ## [v0.20.0](https://github.com/allthebacteria/atb-cli/releases/tag/v0.20.0) - 2026-08-05
 
 ### Added

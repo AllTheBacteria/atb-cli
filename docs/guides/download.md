@@ -28,6 +28,22 @@ atb download --url https://allthebacteria-assemblies.s3.eu-west-2.amazonaws.com/
 
 Genomes are saved to `--output-dir` when given, otherwise to `download.output_dir` (default `~/atb/genomes`). That is a separate location from the metadata directory (`general.data_dir` / `--data-dir` / `$ATB_DATA_DIR`), so the data-dir setting does not change where downloads land.
 
+## Samples with no assembly
+
+Around 464,000 samples in ATB have no assembly. Their `aws_url` is the literal string `NA`. `atb download --from` skips those rows and reports the count:
+
+```
+Skipping 1065 row(s) with no assembly (aws_url is NA)
+Downloading 4775 file(s) to /home/ubuntu/atb/genomes
+```
+
+To leave them out of the query results in the first place, add `--has-assembly`:
+
+```bash
+atb query --species "Escherichia coli" --has-assembly \
+  --columns sample_accession,aws_url -o results.tsv
+```
+
 ## Related pages
 
 - [Querying genomes](query.md) — filter and select genomes to feed into `atb download`
