@@ -14,9 +14,9 @@ import (
 )
 
 const (
-	repo           = "allthebacteria/atb-cli"
-	checkInterval  = 24 * time.Hour
-	stateFileName  = "update-state.json"
+	repo          = "allthebacteria/atb-cli"
+	checkInterval = 24 * time.Hour
+	stateFileName = "update-state.json"
 )
 
 type Release struct {

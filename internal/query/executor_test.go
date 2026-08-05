@@ -294,10 +294,10 @@ func TestParseCollectionDate(t *testing.T) {
 		return t
 	}
 	cases := []struct {
-		in         string
-		wantOK     bool
-		wantStart  time.Time
-		wantEnd    time.Time
+		in        string
+		wantOK    bool
+		wantStart time.Time
+		wantEnd   time.Time
 	}{
 		{"2020-05-15", true, d("2020-05-15"), d("2020-05-15")},
 		{"2020-05", true, d("2020-05-01"), d("2020-05-31")},

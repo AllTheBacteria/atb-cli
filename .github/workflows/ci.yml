@@ -82,7 +82,19 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          # gofmt is a standalone binary and does not follow the toolchain
+          # switch that go.mod's `go 1.25.0` triggers for go commands, so this
+          # job pins the version the module requires.
+          go-version: "1.25"
+
+      - name: Format check
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "gofmt -w . is needed for:"
+            echo "$unformatted"
+            exit 1
+          fi
 
       - name: Vet
         run: go vet ./...
