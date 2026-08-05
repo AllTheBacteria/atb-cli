@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	_ "modernc.org/sqlite"
+
+	"github.com/allthebacteria/atb-cli/internal/match"
 )
 
 // DB wraps a read-only SQLite connection to the index.
@@ -168,8 +170,8 @@ func (d *DB) Query(params QueryParams) ([]map[string]string, error) {
 		args = append(args, params.Species)
 	}
 	if params.SpeciesLike != "" {
-		conditions = append(conditions, "lower(sylph_species) LIKE lower(?)")
-		args = append(args, params.SpeciesLike)
+		conditions = append(conditions, "lower(sylph_species) LIKE ? ESCAPE '\\'")
+		args = append(args, match.ToSQLLike(params.SpeciesLike))
 	}
 	if params.Genus != "" {
 		conditions = append(conditions, "lower(substr(sylph_species, 1, instr(sylph_species, ' ') - 1)) = lower(?)")

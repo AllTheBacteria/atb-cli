@@ -2,6 +2,30 @@
 
 All notable changes to `atb-cli` are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added
+
+- `atb amr --species-like <pattern>` filters AMR results by a wildcard species
+  pattern, matching the flag of the same name on `atb query`. `%` matches any
+  sequence of characters and `_` matches itself, so GTDB clade names such as
+  `"Campylobacter_D jej%"` work as written. The literal text before the first
+  `%` selects which genus partitions are read, so anchored patterns stay on the
+  fast path; a pattern starting with `%` scans the full dataset and prints a
+  note explaining why.
+
+### Fixed
+
+- `--species-like` applies `%` wildcards anywhere in the pattern. Patterns with
+  an interior wildcard, such as `"Enterococcus%faecium"`, previously fell back
+  to an exact string comparison whenever a query was answered from parquet
+  rather than from a SQLite index.
+- `atb query --species-like` treats `_` as a literal character rather than a
+  single-character wildcard, so it agrees with the parquet path and with the
+  documented rule. Patterns that relied on `_` standing in for another
+  character, such as `"Escherichia_coli"` for `Escherichia coli`, no longer
+  match.
+
 ## [v0.18.1](https://github.com/allthebacteria/atb-cli/releases/tag/v0.18.1) - 2026-08-04
 
 ### Changed

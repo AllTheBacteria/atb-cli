@@ -61,7 +61,7 @@ atb query [flags]
       --sort-by string                column to sort by
       --sort-desc                     sort in descending order
       --species string                exact species name (case-insensitive)
-      --species-like string           wildcard species match (use % for wildcards)
+      --species-like string           wildcard species match (% is the wildcard, _ is literal)
 ```
 
 ### Options inherited from parent commands

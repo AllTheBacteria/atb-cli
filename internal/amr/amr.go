@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/allthebacteria/atb-cli/internal/match"
 	pq "github.com/allthebacteria/atb-cli/internal/parquet"
 )
 
@@ -23,7 +24,7 @@ type Filters struct {
 	Samples map[string]struct{}
 	// Class filters by drug class (case-insensitive substring match). Empty means all.
 	Class string
-	// GenePattern filters by gene symbol. Supports % wildcards (prefix/suffix/contains). Empty means all.
+	// GenePattern filters by gene symbol. Supports % wildcards. Empty means all.
 	GenePattern string
 	// MinCoverage is the minimum coverage percentage (0 = no minimum).
 	MinCoverage float64
@@ -38,6 +39,10 @@ type Filters struct {
 	// (case-insensitive exact match against the row's Species field).
 	// Nil or empty means no species-level restriction.
 	Species []string
+	// SpeciesLike restricts results to species matching a wildcard pattern,
+	// e.g. "Campylobacter_D jej%". % matches any sequence of characters and _
+	// is literal. Empty means no pattern restriction.
+	SpeciesLike string
 	// Limit caps the number of returned results. 0 means no limit.
 	Limit int
 }
@@ -85,6 +90,14 @@ func Query(dataDir string, filters Filters) ([]Result, error) {
 	// Try SQLite indexes first for each genus.
 	if len(filters.Genera) > 0 {
 		return queryWithIndexes(dataDir, filters)
+	}
+
+	// A species pattern with a literal prefix still names the genera it can
+	// match, so it can be answered from those partitions alone.
+	if filters.SpeciesLike != "" {
+		if partitions := PartitionsForSpeciesPattern(dataDir, filters.SpeciesLike); len(partitions) > 0 {
+			return queryPartitions(dataDir, partitions, filters)
+		}
 	}
 
 	// No genus filter — full parquet scan.
@@ -174,13 +187,57 @@ func queryWithIndexes(dataDir string, filters Filters) ([]Result, error) {
 	return results, nil
 }
 
+// queryPartitions reads a known set of partitions, preferring each one's
+// SQLite index. Unlike queryWithIndexes it adds no genus row filter, because
+// _other holds rows from many genera.
+func queryPartitions(dataDir string, partitions []string, filters Filters) ([]Result, error) {
+	var results []Result
+	remaining := filters.Limit
+
+	for _, name := range partitions {
+		partFilters := filters
+		if remaining > 0 {
+			partFilters.Limit = remaining
+		}
+
+		var partResults []Result
+		var err error
+
+		idxPath := IndexPath(dataDir, name)
+		partPath := PartitionPath(dataDir, name)
+		switch {
+		case idxPath != "":
+			partResults, err = QueryIndex(idxPath, partFilters)
+		case partPath != "":
+			partResults, err = queryParquetFiles([]string{partPath}, partFilters)
+		default:
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		results = append(results, partResults...)
+		if remaining > 0 {
+			remaining -= len(partResults)
+			if remaining <= 0 {
+				break
+			}
+		}
+	}
+
+	return results, nil
+}
+
 func queryParquet(dataDir string, filters Filters) ([]Result, error) {
 	return queryParquetForGenera(dataDir, filters.Genera, filters)
 }
 
 func queryParquetForGenera(dataDir string, genera []string, filters Filters) ([]Result, error) {
-	paths := resolvePaths(dataDir, genera)
+	return queryParquetFiles(resolvePaths(dataDir, genera), filters)
+}
 
+func queryParquetFiles(paths []string, filters Filters) ([]Result, error) {
 	var results []Result
 	remaining := filters.Limit
 
@@ -268,7 +325,7 @@ func matchesFilters(row pq.AMRRow, f Filters) bool {
 	if f.Class != "" && !strings.Contains(strings.ToUpper(row.Class), strings.ToUpper(f.Class)) {
 		return false
 	}
-	if f.GenePattern != "" && !matchesPattern(row.GeneSymbol, f.GenePattern) {
+	if f.GenePattern != "" && !match.Like(row.GeneSymbol, f.GenePattern) {
 		return false
 	}
 	if f.MinCoverage > 0 && row.Coverage < f.MinCoverage {
@@ -288,6 +345,9 @@ func matchesFilters(row pq.AMRRow, f Filters) bool {
 	if len(f.Species) > 0 && !matchesAny(row.Species, f.Species) {
 		return false
 	}
+	if f.SpeciesLike != "" && !match.Like(row.Species, f.SpeciesLike) {
+		return false
+	}
 	return true
 }
 
@@ -298,27 +358,4 @@ func matchesAny(value string, candidates []string) bool {
 		}
 	}
 	return false
-}
-
-// matchesPattern performs a case-insensitive wildcard match using % as the wildcard character.
-func matchesPattern(s, pattern string) bool {
-	s = strings.ToLower(s)
-	pattern = strings.ToLower(pattern)
-
-	prefix := strings.HasPrefix(pattern, "%")
-	suffix := strings.HasSuffix(pattern, "%")
-
-	switch {
-	case prefix && suffix:
-		inner := pattern[1 : len(pattern)-1]
-		return strings.Contains(s, inner)
-	case prefix:
-		inner := pattern[1:]
-		return strings.HasSuffix(s, inner)
-	case suffix:
-		inner := pattern[:len(pattern)-1]
-		return strings.HasPrefix(s, inner)
-	default:
-		return s == pattern
-	}
 }

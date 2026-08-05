@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -140,6 +141,69 @@ func BuildPartitions(dataDir string, logFn func(string, ...any)) error {
 // stored under their exact source-case filename.
 func PartitionPath(dataDir, genus string) string {
 	return findPartitionFile(filepath.Join(dataDir, PartitionDir), genus+".parquet")
+}
+
+// PartitionsForSpeciesPattern returns the partition names that can hold rows
+// whose species matches pattern, genus partitions first and the _other sweep
+// file last. Returns nil when the pattern cannot narrow the search or no
+// partitions are built, in which case the caller scans the monolithic file.
+func PartitionsForSpeciesPattern(dataDir, pattern string) []string {
+	genus, prefix := genusConstraint(pattern)
+	if genus == "" && prefix == "" {
+		return nil
+	}
+
+	entries, err := os.ReadDir(filepath.Join(dataDir, PartitionDir))
+	if err != nil {
+		return nil
+	}
+
+	var names []string
+	var hasOther bool
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".parquet") {
+			continue
+		}
+		name := strings.TrimSuffix(e.Name(), ".parquet")
+		switch {
+		case name == otherPartition:
+			hasOther = true
+		case genus != "" && strings.EqualFold(name, genus):
+			names = append(names, name)
+		case prefix != "" && strings.HasPrefix(strings.ToLower(name), strings.ToLower(prefix)):
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+
+	// A promoted genus holds all of its own rows, so a pinned genus with a
+	// partition needs nothing else. Every other case can also have matching
+	// rows among the small genera swept into _other.
+	if genus != "" && len(names) > 0 {
+		return names
+	}
+	if hasOther {
+		names = append(names, otherPartition)
+	}
+	return names
+}
+
+// genusConstraint reports what a species pattern implies about the genus of a
+// matching row: an exact genus when the pattern's literal prefix reaches past
+// the space, otherwise the prefix that genus must start with. Both are empty
+// when the pattern opens with a wildcard and constrains nothing.
+func genusConstraint(pattern string) (genus, prefix string) {
+	literal := pattern
+	if i := strings.IndexByte(literal, '%'); i >= 0 {
+		literal = literal[:i]
+	}
+	if literal == "" {
+		return "", ""
+	}
+	if i := strings.IndexByte(literal, ' '); i >= 0 {
+		return literal[:i], ""
+	}
+	return "", literal
 }
 
 // findPartitionFile resolves name in dir, falling back to a case-insensitive

@@ -28,6 +28,8 @@ atb query --genus Salmonella --hq-only --limit 20
 atb query --species-like "Streptococcus%" --hq-only --limit 10
 ```
 
+In `--species-like` patterns `%` matches any sequence of characters; every other character, including `_`, matches itself, so GTDB clade names such as `Streptococcus_A` work as written.
+
 ## Filter by geography and platform (requires ENA tables)
 
 ```bash

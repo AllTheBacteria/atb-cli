@@ -20,6 +20,12 @@ atb amr --species "Escherichia coli" --gene "bla%"
 # Compare resistance across multiple species
 atb amr --species "Escherichia coli,Klebsiella pneumoniae" --class "BETA-LACTAM"
 
+# Wildcard species search -- GTDB names keep their underscores
+atb amr --species-like "Campylobacter_D jej%" --hq-only --format tsv
+
+# Match a species across GTDB naming variants
+atb amr --species-like "Enterococcus%faecium" --hq-only --limit 50
+
 # Find a gene across ALL genera (no species filter needed)
 atb amr --gene "blaCTX-M-15" --limit 100
 
@@ -74,7 +80,11 @@ atb amr --species "Klebsiella pneumoniae" --gene "blaCTX-M-15" --download --dry-
 atb amr --species "Escherichia coli" --gene "bla%" --download --max-samples 20 -d ./bla_genomes
 ```
 
-`--species` accepts comma-separated values for multi-species comparison. When omitted, `--gene` or `--class` is required to search across all genera.
+`--species` accepts comma-separated values for multi-species comparison. When omitted, `--gene`, `--class`, or `--species-like` is required to search across all genera.
+
+`--species-like` treats `%` as "any sequence of characters"; every other character, including `_`, matches itself. GTDB splits some genera into lettered clades -- `Campylobacter_D jejuni`, `Enterococcus_B faecium` -- so an underscore in a pattern is taken literally. `atb query --species-like` follows the same rule.
+
+The literal text before the first `%` tells `atb amr` which genus partitions can hold a match: `"Campylobacter_D jej%"` reads one partition, `"Streptococcus%"` reads every `Streptococcus*` partition plus the shared partition holding genera too small for their own file. A pattern that starts with `%` names no genus and scans the full 1.18 GB file; `atb amr` prints a note when that happens.
 
 The `--download` flag downloads the FASTA assembly for each unique sample in the results. Query output is always printed first. Use `--dry-run` to preview URLs without downloading, and `--max-samples` to cap the number of assemblies.
 

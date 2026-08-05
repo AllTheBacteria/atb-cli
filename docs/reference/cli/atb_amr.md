@@ -6,13 +6,18 @@ Query AMR gene data
 
 Query AMRFinderPlus gene hits from the merged amrfinderplus.parquet file.
 
-Use --species for a full-species match (e.g. "Escherichia coli"), or --genus
-for a broader genus-level match (e.g. "Escherichia"). Both accept comma-
+Use --species for a full-species match (e.g. "Escherichia coli"), --species-like
+for a wildcard match (e.g. "Campylobacter_D jej%"), or --genus for a broader
+genus-level match (e.g. "Escherichia"). --species and --genus accept comma-
 separated lists and may be combined.
 
-When no filter is given (--species, --genus, --gene, --class), the full AMR
-dataset is scanned; you'll be prompted to confirm, or pass --yes to skip the
-prompt.
+In --species-like patterns % matches any sequence of characters and _ matches
+itself, so GTDB names such as "Campylobacter_D" work as written. A pattern that
+starts with % cannot be narrowed to a genus and scans the full dataset.
+
+When no filter is given (--species, --species-like, --genus, --gene, --class),
+the full AMR dataset is scanned; you'll be prompted to confirm, or pass --yes to
+skip the prompt.
 
 Run 'atb fetch' to download the data before querying.
 
@@ -25,6 +30,9 @@ atb amr [flags]
 ```
   # Get AMR gene hits for E. coli (HQ only)
   atb amr --species "Escherichia coli" --hq-only --limit 100
+
+  # Wildcard species match (GTDB names keep their underscores)
+  atb amr --species-like "Campylobacter_D jej%" --hq-only --format tsv
 
   # Filter by drug class
   atb amr --species "Escherichia coli" --class "BETA-LACTAM"
@@ -87,6 +95,7 @@ atb amr [flags]
       --sample-file string            file with one sample accession per line (combined with --samples)
       --samples strings               comma-separated sample accessions to restrict the query to
       --species string                filter by full species name, e.g. "Escherichia coli" (comma-separated for multiple)
+      --species-like string           wildcard species match, e.g. "Campylobacter_D jej%" (% is the wildcard, _ is literal)
       --type string                   element type: amr, stress, virulence, all (default: all types)
       --with-ena                      include country/collection_date/instrument_platform from the ENA table (requires ena_20250506.parquet)
   -y, --yes                           skip the confirmation prompt for an unfiltered full-dataset scan
