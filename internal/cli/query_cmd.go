@@ -421,22 +421,30 @@ func printSpeciesSuggestions(w io.Writer, species string, candidates []string) {
 	}
 }
 
+// noAssembly is the value the ATB tables use where a sample has no assembly.
+// It appears in aws_url and osf_tarball_url on 464,368 rows of the published
+// index, and those samples have no object on S3 at all.
+const noAssembly = "NA"
+
 // parseCSVURLs reads a CSV or TSV file and extracts download URLs. It prefers
 // the aws_url column; when that is absent (e.g. an mlst result file) it falls
 // back to sample_accession and expands each bare accession into a full S3
 // assembly URL, so downstream download works regardless of which columns the
-// source file carries.
-func parseCSVURLs(path string) ([]string, error) {
+// source file carries. Rows marked NA are skipped and counted, since building
+// a URL from them yields a guaranteed 404.
+func parseCSVURLs(path string) ([]string, int, error) {
+	var skipped int
+
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return nil, skipped, err
 	}
 	defer f.Close()
 
 	// Read first line to detect separator
 	scanner := bufio.NewScanner(f)
 	if !scanner.Scan() {
-		return nil, fmt.Errorf("empty file")
+		return nil, skipped, fmt.Errorf("empty file")
 	}
 	firstLine := scanner.Text()
 
@@ -448,7 +456,7 @@ func parseCSVURLs(path string) ([]string, error) {
 
 	// Re-read from start
 	if _, err := f.Seek(0, 0); err != nil {
-		return nil, fmt.Errorf("seeking file: %w", err)
+		return nil, skipped, fmt.Errorf("seeking file: %w", err)
 	}
 
 	r := csv.NewReader(f)
@@ -457,7 +465,7 @@ func parseCSVURLs(path string) ([]string, error) {
 
 	header, err := r.Read()
 	if err != nil {
-		return nil, fmt.Errorf("reading CSV header: %w", err)
+		return nil, skipped, fmt.Errorf("reading CSV header: %w", err)
 	}
 
 	awsIdx := -1
@@ -472,7 +480,7 @@ func parseCSVURLs(path string) ([]string, error) {
 	}
 
 	if awsIdx == -1 && sampleIdx == -1 {
-		return nil, fmt.Errorf("CSV/TSV file must contain an aws_url or sample_accession column")
+		return nil, skipped, fmt.Errorf("CSV/TSV file must contain an aws_url or sample_accession column")
 	}
 
 	var urls []string
@@ -482,7 +490,7 @@ func parseCSVURLs(path string) ([]string, error) {
 			break
 		}
 		if err != nil {
-			return nil, err
+			return nil, skipped, err
 		}
 
 		col := awsIdx
@@ -491,17 +499,22 @@ func parseCSVURLs(path string) ([]string, error) {
 		}
 		if col < len(record) {
 			v := strings.TrimSpace(record[col])
-			if v != "" {
-				// A sample_accession fallback yields a bare ID; turn it into a
-				// full S3 assembly URL. Values that already carry a scheme
-				// (an aws_url column) pass through untouched.
-				if !strings.Contains(v, "://") {
-					v = buildAssemblyURL(v)
-				}
-				urls = append(urls, v)
+			if v == "" {
+				continue
 			}
+			if strings.EqualFold(v, noAssembly) {
+				skipped++
+				continue
+			}
+			// A sample_accession fallback yields a bare ID; turn it into a
+			// full S3 assembly URL. Values that already carry a scheme
+			// (an aws_url column) pass through untouched.
+			if !strings.Contains(v, "://") {
+				v = buildAssemblyURL(v)
+			}
+			urls = append(urls, v)
 		}
 	}
 
-	return urls, nil
+	return urls, skipped, nil
 }
