@@ -38,6 +38,7 @@ func init() {
 
 	RootCmd.AddCommand(newConfigCmd())
 	RootCmd.AddCommand(newQueryCmd())
+	RootCmd.AddCommand(newColumnsCmd())
 	RootCmd.AddCommand(newDownloadCmd())
 	RootCmd.AddCommand(newInfoCmd())
 	RootCmd.AddCommand(newVersionCmd())
@@ -87,6 +88,7 @@ func NewRootCmd(version string) *cobra.Command {
 
 	root.AddCommand(newConfigCmd())
 	root.AddCommand(newQueryCmd())
+	root.AddCommand(newColumnsCmd())
 	root.AddCommand(newDownloadCmd())
 	root.AddCommand(newInfoCmd())
 	root.AddCommand(newVersionCmd())

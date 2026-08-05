@@ -15,16 +15,6 @@ import (
 // Row is a single result row, mapping column name to string value.
 type Row map[string]string
 
-// DefaultColumns lists sensible defaults for BioSample queries.
-var DefaultColumns = []string{
-	"sample_accession",
-	"organism",
-	"tissue",
-	"age",
-	"sex",
-	"disease",
-}
-
 // Format writes rows to w in the requested format.
 // Supported formats: tsv, csv, json, table.
 func Format(w io.Writer, rows []Row, columns []string, format string) error {

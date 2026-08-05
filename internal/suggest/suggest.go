@@ -86,20 +86,48 @@ func plausible(input, cand string, dist int) bool {
 // such name exists here". Levenshtein distance is computed case-insensitively;
 // substring matches get their distance halved as a relevance boost.
 func Suggest(input string, species []string, n int) []string {
+	return rank(input, species, n, plausible)
+}
+
+// nearIdentifier is the gate for short names (see Identifiers).
+func nearIdentifier(input, cand string, dist int) bool {
+	const maxDist = 2
+	if strings.Contains(cand, input) || strings.Contains(input, cand) {
+		return true
+	}
+	return dist <= maxDist
+}
+
+// Identifiers returns up to n candidates closest to the input, for short names
+// such as column names. The fractional gate Suggest uses is too tight for them:
+// a one-character slip in a three-character name already exceeds a quarter of
+// its length, so "N5O" would suggest nothing. A candidate qualifies here when
+// either name contains the other or their case-insensitive edit distance is at
+// most 2, the bound cobra applies to command names. Results are ordered by
+// distance, then by the order the candidates were given.
+func Identifiers(input string, candidates []string, n int) []string {
+	return rank(input, candidates, n, nearIdentifier)
+}
+
+// rank returns up to n candidates that pass the gate, closest first. Distance is
+// computed case-insensitively and the gate receives both names already
+// lowercased. A candidate containing the input has its distance halved as a
+// relevance boost. Ties keep the order the candidates were given in.
+func rank(input string, candidates []string, n int, gate func(input, cand string, dist int) bool) []string {
 	lower := strings.ToLower(input)
 
-	results := make([]scored, 0, len(species))
-	for _, s := range species {
-		cand := strings.ToLower(s)
+	results := make([]scored, 0, len(candidates))
+	for _, c := range candidates {
+		cand := strings.ToLower(c)
 		dist := levenshtein(lower, cand)
-		if !plausible(lower, cand, dist) {
+		if !gate(lower, cand, dist) {
 			continue
 		}
 		score := float64(dist)
 		if strings.Contains(cand, lower) {
 			score /= 2
 		}
-		results = append(results, scored{name: s, score: score})
+		results = append(results, scored{name: c, score: score})
 	}
 
 	sort.SliceStable(results, func(i, j int) bool {

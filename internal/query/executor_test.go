@@ -93,6 +93,100 @@ func TestExecuteWithColumns(t *testing.T) {
 	}
 }
 
+func TestExecuteWithSylphJoin(t *testing.T) {
+	filters := Filters{Species: "Escherichia coli"}
+	cols := []string{"sample_accession", "Adjusted_ANI", "Taxonomic_abundance", "Sequence_abundance", "Median_cov"}
+	rows, err := Execute(fixturesDir, filters, cols)
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	got := make(map[string]ResultRow, len(rows))
+	for _, r := range rows {
+		got[r["sample_accession"]] = r
+	}
+
+	// SAMN00000001 has two sylph rows for its assigned species. The one with
+	// the higher Taxonomic_abundance wins, so ANI is 95 rather than 94.
+	first, ok := got["SAMN00000001"]
+	if !ok {
+		t.Fatal("SAMN00000001 missing from results")
+	}
+	for _, tc := range []struct{ col, want string }{
+		{"Adjusted_ANI", "95"},
+		{"Taxonomic_abundance", "90"},
+		{"Sequence_abundance", "88"},
+		{"Median_cov", "10"},
+	} {
+		if first[tc.col] != tc.want {
+			t.Errorf("SAMN00000001 %s = %q, want %q", tc.col, first[tc.col], tc.want)
+		}
+	}
+
+	// SAMN00000002 has a Klebsiella pneumoniae row at abundance 99.9, higher
+	// than its own assigned species. Rows are selected by species, so the
+	// Escherichia coli row wins and ANI is 95.25 rather than 99.9.
+	second, ok := got["SAMN00000002"]
+	if !ok {
+		t.Fatal("SAMN00000002 missing from results")
+	}
+	if second["Adjusted_ANI"] != "95.25" {
+		t.Errorf("SAMN00000002 Adjusted_ANI = %q, want %q (assigned species, not the higher-abundance decoy)", second["Adjusted_ANI"], "95.25")
+	}
+}
+
+func TestExecuteWithMLSTJoin(t *testing.T) {
+	filters := Filters{Species: "Escherichia coli"}
+	// mean_length comes from assembly_stats. Requesting it alongside the mlst
+	// columns keeps both groups populated in one result row.
+	cols := []string{"sample_accession", "mlst_scheme", "mlst_st", "mlst_status", "mlst_score", "mlst_alleles", "mean_length"}
+	rows, err := Execute(fixturesDir, filters, cols)
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	var first ResultRow
+	for _, r := range rows {
+		if r["sample_accession"] == "SAMN00000001" {
+			first = r
+		}
+	}
+	if first == nil {
+		t.Fatal("SAMN00000001 missing from results")
+	}
+
+	for _, tc := range []struct{ col, want string }{
+		{"mlst_scheme", "ecoli_achtman_4"},
+		{"mlst_st", "131"},
+		{"mlst_status", "PERFECT"},
+		{"mlst_score", "100"},
+		{"mlst_alleles", "adk(10);fumC(11);gyrB(4);icd(8);mdh(8);purA(8);recA(2)"},
+	} {
+		if first[tc.col] != tc.want {
+			t.Errorf("SAMN00000001 %s = %q, want %q", tc.col, first[tc.col], tc.want)
+		}
+	}
+
+	if first["mean_length"] == "" {
+		t.Error("mean_length is empty: requesting mlst columns must not blank out other groups")
+	}
+}
+
+func TestExecuteSylphUnknownSpeciesHasNoValues(t *testing.T) {
+	filters := Filters{Species: "unknown"}
+	cols := []string{"sample_accession", "Adjusted_ANI"}
+	rows, err := Execute(fixturesDir, filters, cols)
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 result for species unknown, got %d", len(rows))
+	}
+	if rows[0]["Adjusted_ANI"] != "" {
+		t.Errorf("Adjusted_ANI = %q, want empty: no sylph row matches an unknown species", rows[0]["Adjusted_ANI"])
+	}
+}
+
 func TestExecuteGenusFilter(t *testing.T) {
 	filters := Filters{Genus: "Salmonella"}
 	rows, err := Execute(fixturesDir, filters, nil)

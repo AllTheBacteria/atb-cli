@@ -30,6 +30,8 @@ atb query --species-like "Streptococcus%" --hq-only --limit 10
 
 In `--species-like` patterns `%` matches any sequence of characters; every other character, including `_`, matches itself, so GTDB clade names such as `Streptococcus_A` work as written.
 
+Run `atb columns` to list every name `--columns` accepts, with the table each one comes from; the same list is in the [column reference](../reference/columns.md). Names are case-sensitive and an unrecognised name is an error, so a typo stops the query instead of producing a blank column.
+
 ## Filter by geography and platform (requires ENA tables)
 
 ```bash

@@ -429,3 +429,53 @@ func TestAMRSpeciesLikeLeadingWildcardNote(t *testing.T) {
 		}
 	})
 }
+
+// A misspelt column used to be silently dropped: the query ran and the column
+// came back blank with exit 0. It must stop the query instead.
+func TestQueryRejectsUnknownColumn(t *testing.T) {
+	_, _, err := runCmd("query", "--data-dir", fixtureDir,
+		"--species", "Escherichia coli", "--columns", "sample_accession,N5O", "--format", "tsv")
+	if err == nil {
+		t.Fatal("query with column N5O succeeded, want an error")
+	}
+
+	msg := err.Error()
+	if !strings.Contains(msg, `unknown column "N5O"`) {
+		t.Errorf("error %q does not name the unknown column", msg)
+	}
+	if !strings.Contains(msg, `"N50"`) {
+		t.Errorf("error %q does not suggest N50", msg)
+	}
+	if !strings.Contains(msg, "atb columns") {
+		t.Errorf("error %q does not point at how to list the columns", msg)
+	}
+}
+
+func TestQueryAcceptsKnownColumns(t *testing.T) {
+	stdout, stderr, err := runCmd("query", "--data-dir", fixtureDir,
+		"--species", "Escherichia coli", "--columns", "sample_accession,N50", "--format", "tsv")
+	if err != nil {
+		t.Fatalf("query with known columns failed: %v\nstderr: %s", err, stderr)
+	}
+
+	if header := strings.SplitN(stdout, "\n", 2)[0]; header != "sample_accession\tN50" {
+		t.Errorf("header = %q, want %q", header, "sample_accession\tN50")
+	}
+}
+
+// A filter file carries its own column list, so it needs the same check.
+func TestQueryRejectsUnknownColumnFromFilterFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "filter.toml")
+	body := "[output]\ncolumns = [\"sample_accession\", \"Genome_size\"]\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatalf("writing filter file: %v", err)
+	}
+
+	_, _, err := runCmd("query", "--data-dir", fixtureDir, "--filter", path, "--format", "tsv")
+	if err == nil {
+		t.Fatal("query with an unknown column in a filter file succeeded, want an error")
+	}
+	if msg := err.Error(); !strings.Contains(msg, `"Genome_Size"`) {
+		t.Errorf("error %q does not suggest the correctly cased Genome_Size", msg)
+	}
+}

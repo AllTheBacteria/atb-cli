@@ -310,6 +310,78 @@ def generate_ena():
     print(f"ena_20250506.parquet: {len(table)} rows")
 
 
+def generate_sylph():
+    """Write a sylph fixture with several rows per sample.
+
+    Production sylph.parquet is a metagenomic profile: one row per species
+    detected in a sample, so a sample has as many rows as species found in it.
+    A query joins the row whose Species equals the sample's assigned
+    sylph_species. The fixture covers the cases that join has to handle:
+
+      SAMN00000001  two rows for the assigned species, different abundances
+      SAMN00000002  a decoy species with higher abundance than the assigned one
+      SAMN00000020  species "unknown", so no row matches at all
+    """
+    decoys = [
+        "Bacteroides uniformis",
+        "Phocaeicola vulgatus",
+        "Alistipes putredinis",
+        "Bifidobacterium longum",
+    ]
+
+    samples, runs, species = [], [], []
+    tax_abund, seq_abund, ani, median_cov = [], [], [], []
+
+    def row(i: int, sp: str, tax: float, seq: float, adj: float, cov: int):
+        samples.append(SAMPLE_IDS[i])
+        runs.append(RUN_IDS[i])
+        species.append(sp)
+        tax_abund.append(tax)
+        seq_abund.append(seq)
+        ani.append(adj)
+        median_cov.append(cov)
+
+    for i, sp in enumerate(SPECIES):
+        # A lower-abundance duplicate of the assigned species. The join must
+        # keep the dominant row below, not this one.
+        if i == 0:
+            row(i, sp, 60.0, 59.0, 94.0, 5)
+
+        if sp != "unknown":
+            row(i, sp, 90.0 + i * 0.5, 88.0 + i * 0.5, 95.0 + i * 0.25, 10 + i)
+
+        # A decoy that outranks the assigned species on abundance. Selection
+        # is by species, so this row must still be ignored.
+        if i == 1:
+            row(i, "Klebsiella pneumoniae", 99.9, 99.8, 99.9, 400)
+
+        row(i, decoys[i % len(decoys)], 0.5, 0.4, 95.1, 1)
+
+    n = len(samples)
+    table = pa.table(
+        {
+            "sample_accession": ls(samples),
+            "run_accession": ls(runs),
+            "Genome_file": ls([f"gtdb_genomes_reps_r214/{s}.fna.gz" for s in samples]),
+            "Taxonomic_abundance": pa.array(tax_abund, type=pa.float64()),
+            "Sequence_abundance": pa.array(seq_abund, type=pa.float64()),
+            "Adjusted_ANI": pa.array(ani, type=pa.float64()),
+            "Eff_cov": pa.array([round(c * 1.1, 3) for c in median_cov], type=pa.float64()),
+            "ANI_5_95_percentile": ls(["95.18-98.76"] * n),
+            "Eff_lambda": ls(["0.041"] * n),
+            "Lambda_5_95_percentile": ls(["0.02-0.07"] * n),
+            "Median_cov": pa.array(median_cov, type=pa.int64()),
+            "Mean_cov_geq1": pa.array([round(c * 1.02, 3) for c in median_cov], type=pa.float64()),
+            "Containment_ind": ls(["345/21652"] * n),
+            "Naive_ANI": pa.array([round(a - 1.5, 2) for a in ani], type=pa.float64()),
+            "Contig_name": ls([f"NC_{i:06d}.1 contig" for i in range(n)]),
+            "Species": ls(species),
+        }
+    )
+    pq.write_table(table, OUTPUT_DIR / "sylph.parquet")
+    print(f"sylph.parquet: {len(table)} rows")
+
+
 def generate_mlst():
     # MLST scheme mapping by species
     # E. coli: ecoli_achtman_4 (SAMN1, SAMN2, SAMN11, SAMN12, SAMN19)
@@ -533,6 +605,7 @@ if __name__ == "__main__":
     generate_checkm2()
     generate_run()
     generate_ena()
+    generate_sylph()
     generate_mlst()
     generate_amrfinderplus()
     print(f"\nAll fixtures written to {OUTPUT_DIR}")
