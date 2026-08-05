@@ -23,6 +23,8 @@ type Filters struct {
 	Genus              string   `toml:"genus"`
 	Samples            []string `toml:"samples"`
 	SampleFile         string   `toml:"sample_file"`
+	Runs               []string `toml:"runs"`
+	RunFile            string   `toml:"run_file"`
 	HQOnly             bool     `toml:"hq_only"`
 	MinCompleteness    float64  `toml:"min_completeness"`
 	MaxContamination   float64  `toml:"max_contamination"`
@@ -36,6 +38,8 @@ type Filters struct {
 
 	// sampleFileEntries holds accessions loaded from SampleFile.
 	sampleFileEntries []string
+	// runFileEntries holds accessions loaded from RunFile.
+	runFileEntries []string
 }
 
 // OutputConfig controls how query results are formatted and written.
@@ -96,12 +100,12 @@ func (f *Filters) MatchesSpeciesLike(species string) bool {
 	return match.Like(species, f.SpeciesLike)
 }
 
-// LoadSampleFile reads sample accessions from the file referenced by SampleFile.
-// Lines starting with # and blank lines are skipped.
-func (f *Filters) LoadSampleFile() error {
-	file, err := os.Open(f.SampleFile)
+// readAccessionFile reads one accession per line, skipping blank lines and
+// lines starting with #, and trimming surrounding space.
+func readAccessionFile(path string) ([]string, error) {
+	file, err := os.Open(path)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer file.Close()
 
@@ -115,11 +119,63 @@ func (f *Filters) LoadSampleFile() error {
 		entries = append(entries, line)
 	}
 	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return entries, nil
+}
+
+// dedupe returns the concatenation of lists with each entry kept once, in
+// first-seen order.
+func dedupe(lists ...[]string) []string {
+	total := 0
+	for _, l := range lists {
+		total += len(l)
+	}
+	seen := make(map[string]struct{}, total)
+	out := make([]string, 0, total)
+	for _, list := range lists {
+		for _, s := range list {
+			if _, ok := seen[s]; ok {
+				continue
+			}
+			seen[s] = struct{}{}
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// LoadSampleFile reads sample accessions from the file referenced by SampleFile.
+// Lines starting with # and blank lines are skipped.
+func (f *Filters) LoadSampleFile() error {
+	entries, err := readAccessionFile(f.SampleFile)
+	if err != nil {
 		return err
 	}
-
 	f.sampleFileEntries = entries
 	return nil
+}
+
+// LoadRunFile reads run accessions from the file referenced by RunFile.
+// Lines starting with # and blank lines are skipped.
+func (f *Filters) LoadRunFile() error {
+	entries, err := readAccessionFile(f.RunFile)
+	if err != nil {
+		return err
+	}
+	f.runFileEntries = entries
+	return nil
+}
+
+// HasRunFilter reports whether any run accession filter is active.
+func (f *Filters) HasRunFilter() bool {
+	return len(f.Runs) > 0 || len(f.runFileEntries) > 0
+}
+
+// RunAccessions returns the deduplicated union of the Runs slice and any
+// accessions loaded from a run file, preserving first-seen order.
+func (f *Filters) RunAccessions() []string {
+	return dedupe(f.Runs, f.runFileEntries)
 }
 
 // HasSampleFilter reports whether any sample filter is active.
@@ -145,16 +201,5 @@ func (f *Filters) SampleSet() map[string]struct{} {
 // accessions loaded from a sample file, preserving first-seen order. It is the
 // slice counterpart to SampleSet, suitable for building SQL IN clauses.
 func (f *Filters) SampleAccessions() []string {
-	seen := make(map[string]struct{}, len(f.Samples)+len(f.sampleFileEntries))
-	out := make([]string, 0, len(f.Samples)+len(f.sampleFileEntries))
-	for _, list := range [][]string{f.Samples, f.sampleFileEntries} {
-		for _, s := range list {
-			if _, ok := seen[s]; ok {
-				continue
-			}
-			seen[s] = struct{}{}
-			out = append(out, s)
-		}
-	}
-	return out
+	return dedupe(f.Samples, f.sampleFileEntries)
 }

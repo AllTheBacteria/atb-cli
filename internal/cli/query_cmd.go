@@ -37,6 +37,8 @@ func newQueryCmd() *cobra.Command {
 		genus              string
 		samples            []string
 		sampleFile         string
+		runAccessions      []string
+		runFile            string
 		hqOnly             bool
 		minCompleteness    float64
 		maxContamination   float64
@@ -67,6 +69,12 @@ func newQueryCmd() *cobra.Command {
 
   # Filter by country (requires ENA data)
   atb query --species "Salmonella enterica" --country "United Kingdom" --limit 20
+
+  # Look up samples by sequencing run accession
+  atb query --runs ERR1234567,SRR7654321 --columns sample_accession,aws_url
+
+  # Resolve a list of run accessions and keep only those with an assembly
+  atb query --run-file runs.txt --has-assembly --columns sample_accession,aws_url -o urls.tsv
 
   # Use a TOML filter file for reproducible queries
   atb query --filter my_query.toml
@@ -126,6 +134,12 @@ func newQueryCmd() *cobra.Command {
 			if cmd.Flags().Changed("sample-file") {
 				filters.SampleFile = sampleFile
 			}
+			if cmd.Flags().Changed("runs") {
+				filters.Runs = runAccessions
+			}
+			if cmd.Flags().Changed("run-file") {
+				filters.RunFile = runFile
+			}
 			if cmd.Flags().Changed("hq-only") {
 				filters.HQOnly = hqOnly
 			}
@@ -162,6 +176,18 @@ func newQueryCmd() *cobra.Command {
 				if err := filters.LoadSampleFile(); err != nil {
 					return fmt.Errorf("loading sample file: %w", err)
 				}
+			}
+
+			if filters.RunFile != "" {
+				if err := filters.LoadRunFile(); err != nil {
+					return fmt.Errorf("loading run file: %w", err)
+				}
+			}
+
+			// Run accessions become sample accessions before an engine is
+			// chosen, so the index and the parquet scan filter the same way.
+			if err := resolveRunFilter(&filters, dir, cmd.ErrOrStderr()); err != nil {
+				return err
 			}
 
 			// Output config overrides
@@ -336,6 +362,8 @@ func newQueryCmd() *cobra.Command {
 	cmd.Flags().StringVar(&genus, "genus", "", "filter by genus")
 	cmd.Flags().StringSliceVar(&samples, "samples", nil, "comma-separated sample accessions")
 	cmd.Flags().StringVar(&sampleFile, "sample-file", "", "file with one sample accession per line")
+	cmd.Flags().StringSliceVar(&runAccessions, "runs", nil, "comma-separated run accessions (ERR/SRR/DRR), resolved to samples")
+	cmd.Flags().StringVar(&runFile, "run-file", "", "file with one run accession per line")
 	cmd.Flags().BoolVar(&hqOnly, "hq-only", false, "only return high-quality genomes (HQFilter=PASS)")
 	cmd.Flags().Float64Var(&minCompleteness, "min-completeness", 0, "minimum CheckM2 completeness")
 	cmd.Flags().Float64Var(&maxContamination, "max-contamination", 0, "maximum CheckM2 contamination")

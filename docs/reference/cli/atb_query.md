@@ -28,6 +28,12 @@ atb query [flags]
   # Filter by country (requires ENA data)
   atb query --species "Salmonella enterica" --country "United Kingdom" --limit 20
 
+  # Look up samples by sequencing run accession
+  atb query --runs ERR1234567,SRR7654321 --columns sample_accession,aws_url
+
+  # Resolve a list of run accessions and keep only those with an assembly
+  atb query --run-file runs.txt --has-assembly --columns sample_accession,aws_url -o urls.tsv
+
   # Use a TOML filter file for reproducible queries
   atb query --filter my_query.toml
 
@@ -56,6 +62,8 @@ atb query [flags]
       --offset int                    number of rows to skip
   -o, --output string                 write output to file instead of stdout
       --platform string               filter by sequencing platform (ENA metadata)
+      --run-file string               file with one run accession per line
+      --runs strings                  comma-separated run accessions (ERR/SRR/DRR), resolved to samples
       --sample-file string            file with one sample accession per line
       --samples strings               comma-separated sample accessions
       --sort-by string                column to sort by

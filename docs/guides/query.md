@@ -32,6 +32,43 @@ In `--species-like` patterns `%` matches any sequence of characters; every other
 
 Run `atb columns` to list every name `--columns` accepts, with the table each one comes from; the same list is in the [column reference](../reference/columns.md). Names are case-sensitive and an unrecognised name is an error, so a typo stops the query instead of producing a blank column.
 
+## Query by sequencing run accession
+
+ATB is keyed by sample accession (`SAMEA…`, `SAMN…`, `SAMD…`). If you have run accessions instead (`ERR…`, `SRR…`, `DRR…`), `--runs` and `--run-file` translate them for you using the `run.parquet` mapping table:
+
+```bash
+# A few runs given on the command line
+atb query --runs ERR1234567,SRR7654321 --columns sample_accession,sylph_species,aws_url
+
+# A list of runs from a file, one per line
+atb query --run-file runs.txt --columns sample_accession,aws_url
+```
+
+The run accessions are resolved to sample accessions before the query runs, and the resolution is reported:
+
+```
+Resolved 6000 run accession(s) to 5981 sample accession(s)
+5,840 result(s)
+```
+
+Two things to know about the counts:
+
+- **A run may carry more than one sample.** Multiplexed runs map to several sample accessions, so the sample count can exceed the run count.
+- **Not every sample is in ATB.** A run can resolve to a sample the database does not hold, so the result count can be lower than the sample count. Runs that are not in the mapping table at all are listed as a warning. If none of them resolve, the query fails rather than returning the whole database.
+
+To hand a collaborator a download list, add `--has-assembly` so samples with no assembly are dropped:
+
+```bash
+atb query --run-file runs.txt --has-assembly \
+  --columns sample_accession,aws_url -o urls.tsv
+
+atb download --from urls.tsv --workers 8
+```
+
+Without `--has-assembly` the `aws_url` column contains `NA` for samples that were never assembled. `atb download --from` skips those rows and reports how many it skipped.
+
+`--runs` combines with `--samples` as a union, and with every other filter as an AND. `run.parquet` is one of the core tables, so `atb fetch` already downloads it.
+
 ## Filter by geography and platform (requires ENA tables)
 
 ```bash
