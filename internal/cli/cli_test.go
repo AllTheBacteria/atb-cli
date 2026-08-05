@@ -337,3 +337,95 @@ func TestAMRDownloadMaxSamples(t *testing.T) {
 		}
 	}
 }
+
+// speciesColumn returns the values of the species column from TSV output.
+func speciesColumn(t *testing.T, tsv string) []string {
+	t.Helper()
+
+	lines := strings.Split(strings.TrimSpace(tsv), "\n")
+	if len(lines) < 2 {
+		t.Fatalf("expected a header and at least one data row, got:\n%s", tsv)
+	}
+
+	col := -1
+	for i, name := range strings.Split(lines[0], "\t") {
+		if name == "species" {
+			col = i
+		}
+	}
+	if col < 0 {
+		t.Fatalf("no species column in header %q", lines[0])
+	}
+
+	var values []string
+	for _, line := range lines[1:] {
+		fields := strings.Split(line, "\t")
+		if col >= len(fields) {
+			t.Fatalf("row has no species field: %q", line)
+		}
+		values = append(values, fields[col])
+	}
+	return values
+}
+
+func TestAMRSpeciesLike(t *testing.T) {
+	dir := fixtureDirWithIndex(t)
+
+	stdout, stderr, err := runCmd("amr", "--data-dir", dir,
+		"--species-like", "Escherichia co%", "--format", "tsv", "--limit", "20")
+	if err != nil {
+		t.Fatalf("amr --species-like failed: %v\nstderr: %s", err, stderr)
+	}
+
+	// A species pattern is a filter, so it must not trigger the full-scan prompt.
+	if strings.Contains(stderr, "--yes") {
+		t.Errorf("expected no full-scan confirmation, got stderr:\n%s", stderr)
+	}
+
+	for _, species := range speciesColumn(t, stdout) {
+		if !strings.HasPrefix(species, "Escherichia co") {
+			t.Errorf("species %q does not match pattern %q", species, "Escherichia co%")
+		}
+	}
+}
+
+func TestAMRSpeciesLikeUnderscoreIsLiteral(t *testing.T) {
+	dir := fixtureDirWithIndex(t)
+
+	// The fixture species is "Escherichia coli" with a space, so a literal
+	// underscore must not stand in for it.
+	stdout, stderr, err := runCmd("amr", "--data-dir", dir,
+		"--species-like", "Escherichia_coli", "--format", "tsv")
+	if err != nil {
+		t.Fatalf("amr --species-like failed: %v\nstderr: %s", err, stderr)
+	}
+	if strings.Contains(stdout, "Escherichia coli") {
+		t.Errorf("expected no rows for a literal underscore pattern, got:\n%s", stdout)
+	}
+}
+
+func TestAMRSpeciesLikeLeadingWildcardNote(t *testing.T) {
+	dir := fixtureDirWithIndex(t)
+
+	t.Run("leading wildcard explains the full scan", func(t *testing.T) {
+		_, stderr, err := runCmd("amr", "--data-dir", dir,
+			"--species-like", "%coli", "--format", "tsv", "--limit", "5")
+		if err != nil {
+			t.Fatalf("amr --species-like failed: %v\nstderr: %s", err, stderr)
+		}
+		if !strings.Contains(stderr, "starts with a wildcard") {
+			t.Errorf("expected a note about the full scan, got stderr:\n%s", stderr)
+		}
+	})
+
+	t.Run("anchored pattern is quiet", func(t *testing.T) {
+		_, stderr, err := runCmd("amr", "--data-dir", dir,
+			"--species-like", "Escherichia%", "--format", "tsv", "--limit", "5")
+		if err != nil {
+			t.Fatalf("amr --species-like failed: %v\nstderr: %s", err, stderr)
+		}
+		if strings.Contains(stderr, "starts with a wildcard") {
+			t.Errorf("unexpected full-scan note for an anchored pattern, got stderr:\n%s", stderr)
+		}
+	})
+}

@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/allthebacteria/atb-cli/internal/amr"
+	"github.com/allthebacteria/atb-cli/internal/match"
 	"github.com/allthebacteria/atb-cli/internal/output"
 	pq "github.com/allthebacteria/atb-cli/internal/parquet"
 	"github.com/allthebacteria/atb-cli/internal/query"
@@ -22,6 +23,7 @@ import (
 func newAMRCmd() *cobra.Command {
 	var (
 		species     string
+		speciesLike string
 		genus       string
 		elementType string
 		class       string
@@ -53,17 +55,25 @@ func newAMRCmd() *cobra.Command {
 		Short: "Query AMR gene data",
 		Long: `Query AMRFinderPlus gene hits from the merged amrfinderplus.parquet file.
 
-Use --species for a full-species match (e.g. "Escherichia coli"), or --genus
-for a broader genus-level match (e.g. "Escherichia"). Both accept comma-
+Use --species for a full-species match (e.g. "Escherichia coli"), --species-like
+for a wildcard match (e.g. "Campylobacter_D jej%"), or --genus for a broader
+genus-level match (e.g. "Escherichia"). --species and --genus accept comma-
 separated lists and may be combined.
 
-When no filter is given (--species, --genus, --gene, --class), the full AMR
-dataset is scanned; you'll be prompted to confirm, or pass --yes to skip the
-prompt.
+In --species-like patterns % matches any sequence of characters and _ matches
+itself, so GTDB names such as "Campylobacter_D" work as written. A pattern that
+starts with % cannot be narrowed to a genus and scans the full dataset.
+
+When no filter is given (--species, --species-like, --genus, --gene, --class),
+the full AMR dataset is scanned; you'll be prompted to confirm, or pass --yes to
+skip the prompt.
 
 Run 'atb fetch' to download the data before querying.`,
 		Example: `  # Get AMR gene hits for E. coli (HQ only)
   atb amr --species "Escherichia coli" --hq-only --limit 100
+
+  # Wildcard species match (GTDB names keep their underscores)
+  atb amr --species-like "Campylobacter_D jej%" --hq-only --format tsv
 
   # Filter by drug class
   atb amr --species "Escherichia coli" --class "BETA-LACTAM"
@@ -130,8 +140,8 @@ Run 'atb fetch' to download the data before querying.`,
 				genera = append(genera, g)
 			}
 
-			hasFilter := len(speciesList) > 0 || len(explicitGenera) > 0 || gene != "" || class != "" ||
-				len(samples) > 0 || sampleFile != ""
+			hasFilter := len(speciesList) > 0 || speciesLike != "" || len(explicitGenera) > 0 ||
+				gene != "" || class != "" || len(samples) > 0 || sampleFile != ""
 			if !hasFilter && !yes {
 				if err := confirmFullAMRScan(dir, cmd.ErrOrStderr()); err != nil {
 					return err
@@ -142,6 +152,15 @@ Run 'atb fetch' to download the data before querying.`,
 			amrPath := filepath.Join(dir, amr.AMRFileName)
 			if _, statErr := os.Stat(amrPath); statErr != nil {
 				return fmt.Errorf("AMR data not found — run 'atb fetch' to download %s", amr.AMRFileName)
+			}
+
+			// Only the literal part before the first % names the genera a row can
+			// belong to, so a pattern opening with % leaves nothing to narrow by.
+			if strings.HasPrefix(speciesLike, "%") {
+				fmt.Fprintf(cmd.ErrOrStderr(),
+					"Note: %q starts with a wildcard, so the full AMR dataset is scanned.\n"+
+						"      Anchor the pattern to a genus (e.g. \"Escherichia%%\") for a faster query.\n",
+					speciesLike)
 			}
 
 			enaFilter := query.ENAFilter{
@@ -179,6 +198,9 @@ Run 'atb fetch' to download the data before querying.`,
 				}
 				hqRows, hqErr := pq.ReadStreamFiltered[pq.AssemblyRow](assemblyPath, func(r pq.AssemblyRow) bool {
 					if r.HQFilter != "PASS" {
+						return false
+					}
+					if speciesLike != "" && !match.Like(r.SylphSpecies, speciesLike) {
 						return false
 					}
 					if len(lowerSpecies) > 0 {
@@ -231,6 +253,7 @@ Run 'atb fetch' to download the data before querying.`,
 				ElementType: elementType,
 				Genera:      genera,
 				Species:     speciesList,
+				SpeciesLike: speciesLike,
 				Limit:       limit,
 			}
 
@@ -316,6 +339,7 @@ Run 'atb fetch' to download the data before querying.`,
 	}
 
 	cmd.Flags().StringVar(&species, "species", "", "filter by full species name, e.g. \"Escherichia coli\" (comma-separated for multiple)")
+	cmd.Flags().StringVar(&speciesLike, "species-like", "", "wildcard species match, e.g. \"Campylobacter_D jej%\" (% is the wildcard, _ is literal)")
 	cmd.Flags().StringVar(&genus, "genus", "", "filter by genus, e.g. \"Escherichia\" (comma-separated for multiple)")
 	cmd.Flags().StringVar(&elementType, "type", "", "element type: amr, stress, virulence, all (default: all types)")
 	cmd.Flags().StringVar(&class, "class", "", "filter by drug class (case-insensitive, substring match)")

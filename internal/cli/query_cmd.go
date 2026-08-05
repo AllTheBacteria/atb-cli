@@ -319,7 +319,7 @@ func newQueryCmd() *cobra.Command {
 	// Filter flags
 	cmd.Flags().StringVar(&filterFile, "filter", "", "TOML filter file")
 	cmd.Flags().StringVar(&species, "species", "", "exact species name (case-insensitive)")
-	cmd.Flags().StringVar(&speciesLike, "species-like", "", "wildcard species match (use % for wildcards)")
+	cmd.Flags().StringVar(&speciesLike, "species-like", "", "wildcard species match (% is the wildcard, _ is literal)")
 	cmd.Flags().StringVar(&genus, "genus", "", "filter by genus")
 	cmd.Flags().StringSliceVar(&samples, "samples", nil, "comma-separated sample accessions")
 	cmd.Flags().StringVar(&sampleFile, "sample-file", "", "file with one sample accession per line")

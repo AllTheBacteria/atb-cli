@@ -3,6 +3,7 @@ package index
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -402,4 +403,35 @@ func TestSpeciesListLimit(t *testing.T) {
 	if list[0].Species != "Escherichia coli" {
 		t.Errorf("first species: expected Escherichia coli, got %q", list[0].Species)
 	}
+}
+
+func TestQuerySpeciesLikeWildcards(t *testing.T) {
+	db := buildTestIndex(t)
+
+	t.Run("percent matches any sequence", func(t *testing.T) {
+		rows, err := db.Query(QueryParams{SpeciesLike: "Escherichia%"})
+		if err != nil {
+			t.Fatalf("Query: %v", err)
+		}
+		if len(rows) == 0 {
+			t.Fatal("expected Escherichia rows")
+		}
+		for _, r := range rows {
+			if !strings.HasPrefix(r["sylph_species"], "Escherichia") {
+				t.Errorf("unexpected species %q", r["sylph_species"])
+			}
+		}
+	})
+
+	// GTDB species names carry literal underscores (Campylobacter_D), so an
+	// underscore must match itself rather than any single character.
+	t.Run("underscore is literal", func(t *testing.T) {
+		rows, err := db.Query(QueryParams{SpeciesLike: "Escherichia_coli"})
+		if err != nil {
+			t.Fatalf("Query: %v", err)
+		}
+		if len(rows) != 0 {
+			t.Errorf("expected no rows for %q, got %d", "Escherichia_coli", len(rows))
+		}
+	})
 }

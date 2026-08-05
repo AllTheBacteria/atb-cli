@@ -221,6 +221,11 @@ func TestMatchesSpeciesLike(t *testing.T) {
 		{"contains wildcard no match", "%aureus%", "E. coli", false},
 		{"case insensitive prefix", "salmonella%", "Salmonella enterica", true},
 		{"case insensitive suffix", "%COLI", "E. coli", true},
+		{"interior wildcard", "Enterococcus%faecium", "Enterococcus_B faecium", true},
+		{"interior wildcard no match", "Enterococcus%faecium", "Enterococcus faecalis", false},
+		{"underscore is literal", "Streptococcus_A%", "Streptococcus_A pyogenes", true},
+		{"underscore does not match other characters", "Streptococcus_A%", "Streptococcus pyogenes", false},
+		{"exact match without wildcards", "Salmonella enterica", "Salmonella enterica", true},
 	}
 
 	for _, tc := range cases {

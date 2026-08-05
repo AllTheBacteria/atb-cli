@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/allthebacteria/atb-cli/internal/match"
 )
 
 // FilterFile is the top-level structure for a TOML filter file.
@@ -85,35 +87,13 @@ func (f *Filters) MatchesSpecies(species string) bool {
 	return strings.EqualFold(f.Species, species)
 }
 
-// MatchesSpeciesLike performs a wildcard match using % (prefix, suffix, contains)
-// against the SpeciesLike filter. An empty filter matches everything.
+// MatchesSpeciesLike performs a wildcard match using % against the SpeciesLike
+// filter. An empty filter matches everything.
 func (f *Filters) MatchesSpeciesLike(species string) bool {
 	if f.SpeciesLike == "" {
 		return true
 	}
-
-	pattern := strings.ToLower(f.SpeciesLike)
-	target := strings.ToLower(species)
-
-	prefix := strings.HasPrefix(pattern, "%")
-	suffix := strings.HasSuffix(pattern, "%")
-
-	switch {
-	case prefix && suffix:
-		// contains match: %term%
-		inner := pattern[1 : len(pattern)-1]
-		return strings.Contains(target, inner)
-	case prefix:
-		// suffix match: %term
-		inner := pattern[1:]
-		return strings.HasSuffix(target, inner)
-	case suffix:
-		// prefix match: term%
-		inner := pattern[:len(pattern)-1]
-		return strings.HasPrefix(target, inner)
-	default:
-		return target == pattern
-	}
+	return match.Like(species, f.SpeciesLike)
 }
 
 // LoadSampleFile reads sample accessions from the file referenced by SampleFile.

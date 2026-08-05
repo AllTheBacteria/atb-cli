@@ -15,6 +15,7 @@ import (
 
 	parquetgo "github.com/parquet-go/parquet-go"
 
+	"github.com/allthebacteria/atb-cli/internal/match"
 	pq "github.com/allthebacteria/atb-cli/internal/parquet"
 )
 
@@ -340,9 +341,8 @@ func buildSQL(f Filters) (string, []any) {
 		args = append(args, "%"+strings.ToUpper(f.Class)+"%")
 	}
 	if f.GenePattern != "" {
-		sqlPattern := convertToSQLLike(f.GenePattern)
 		clauses = append(clauses, "LOWER(gene_symbol) LIKE ? ESCAPE '\\'")
-		args = append(args, sqlPattern)
+		args = append(args, match.ToSQLLike(f.GenePattern))
 	}
 	if f.MinCoverage > 0 {
 		clauses = append(clauses, "coverage >= ?")
@@ -364,6 +364,10 @@ func buildSQL(f Filters) (string, []any) {
 		}
 		clauses = append(clauses, "LOWER(species) IN ("+strings.Join(placeholders, ",")+")")
 	}
+	if f.SpeciesLike != "" {
+		clauses = append(clauses, "LOWER(species) LIKE ? ESCAPE '\\'")
+		args = append(args, match.ToSQLLike(f.SpeciesLike))
+	}
 
 	q := `SELECT name, protein_id, contig_id, start, stop, strand,
 	       gene_symbol, element_name, scope, element_type, element_subtype,
@@ -379,24 +383,6 @@ func buildSQL(f Filters) (string, []any) {
 		q += fmt.Sprintf(" LIMIT %d", f.Limit)
 	}
 	return q, args
-}
-
-// convertToSQLLike converts our % wildcard pattern to a SQL LIKE pattern.
-// Escapes SQL special chars (_ and %) in the literal parts, preserving our % as SQL %.
-func convertToSQLLike(pattern string) string {
-	pattern = strings.ToLower(pattern)
-	var b strings.Builder
-	for _, ch := range pattern {
-		switch ch {
-		case '%':
-			b.WriteRune('%') // our wildcard → SQL wildcard
-		case '_':
-			b.WriteString("\\_") // escape SQL single-char wildcard
-		default:
-			b.WriteRune(ch)
-		}
-	}
-	return b.String()
 }
 
 func workers() int {
