@@ -47,7 +47,7 @@ func Execute(dataDir string, filters Filters, columns []string) ([]ResultRow, er
 			if !filters.MatchesSpeciesLike(row.SylphSpecies) {
 				return false
 			}
-			if filters.Genus != "" && !strings.EqualFold(pq.GenusFromSpecies(row.SylphSpecies), filters.Genus) {
+			if !filters.MatchesGenus(row.SylphSpecies) {
 				return false
 			}
 			if filters.Dataset != "" && !strings.EqualFold(row.Dataset, filters.Dataset) {

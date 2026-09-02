@@ -11,6 +11,7 @@ import (
 
 	parquetgo "github.com/parquet-go/parquet-go"
 
+	"github.com/allthebacteria/atb-cli/internal/match"
 	pq "github.com/allthebacteria/atb-cli/internal/parquet"
 )
 
@@ -133,6 +134,60 @@ func BuildPartitions(dataDir string, logFn func(string, ...any)) error {
 	}
 
 	return nil
+}
+
+// expandGeneraToPartitions replaces each requested genus with the on-disk
+// partition genera whose canonical (GTDB-suffix-stripped) name matches it, so
+// an NCBI-style genus such as "Enterococcus" resolves to the clade partitions
+// "Enterococcus_A" and "Enterococcus_B". A genus with no matching partition is
+// kept unchanged so the caller can fall back to the monolithic scan. When no
+// partition directory exists, the input is returned as-is.
+func expandGeneraToPartitions(dataDir string, genera []string) []string {
+	if len(genera) == 0 {
+		return genera
+	}
+
+	entries, err := os.ReadDir(filepath.Join(dataDir, PartitionDir))
+	if err != nil {
+		return genera
+	}
+	var partitions []string
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".parquet") {
+			continue
+		}
+		name := strings.TrimSuffix(e.Name(), ".parquet")
+		if name == otherPartition {
+			continue
+		}
+		partitions = append(partitions, name)
+	}
+
+	seen := make(map[string]struct{}, len(genera))
+	var out []string
+	add := func(g string) {
+		if _, ok := seen[g]; ok {
+			return
+		}
+		seen[g] = struct{}{}
+		out = append(out, g)
+	}
+	for _, g := range genera {
+		var matched []string
+		for _, p := range partitions {
+			if match.SpeciesMatches(g, p) {
+				matched = append(matched, p)
+			}
+		}
+		if len(matched) > 0 {
+			for _, m := range matched {
+				add(m)
+			}
+			continue
+		}
+		add(g)
+	}
+	return out
 }
 
 // PartitionPath returns the path to a genus partition file if it exists.

@@ -188,14 +188,6 @@ Run 'atb fetch' to download the data before querying.`,
 			if hqOnly {
 				fmt.Fprintf(os.Stderr, "Loading HQ sample set...\n")
 				assemblyPath := filepath.Join(dir, "assembly.parquet")
-				lowerGenera := make(map[string]bool, len(genera))
-				for _, g := range genera {
-					lowerGenera[strings.ToLower(g)] = true
-				}
-				lowerSpecies := make(map[string]bool, len(speciesList))
-				for _, s := range speciesList {
-					lowerSpecies[strings.ToLower(s)] = true
-				}
 				hqRows, hqErr := pq.ReadStreamFiltered[pq.AssemblyRow](assemblyPath, func(r pq.AssemblyRow) bool {
 					if r.HQFilter != "PASS" {
 						return false
@@ -203,11 +195,11 @@ Run 'atb fetch' to download the data before querying.`,
 					if speciesLike != "" && !match.Like(r.SylphSpecies, speciesLike) {
 						return false
 					}
-					if len(lowerSpecies) > 0 {
-						return lowerSpecies[strings.ToLower(r.SylphSpecies)]
+					if len(speciesList) > 0 {
+						return matchesAnySpecies(speciesList, r.SylphSpecies)
 					}
-					if len(lowerGenera) > 0 {
-						return lowerGenera[strings.ToLower(pq.GenusFromSpecies(r.SylphSpecies))]
+					if len(genera) > 0 {
+						return matchesAnySpecies(genera, pq.GenusFromSpecies(r.SylphSpecies))
 					}
 					return true
 				}, 0)
@@ -487,6 +479,18 @@ func intersectSampleSets(a, b map[string]struct{}) map[string]struct{} {
 		}
 	}
 	return out
+}
+
+// matchesAnySpecies reports whether the stored GTDB species or genus matches
+// any of the user-supplied queries, treating GTDB alphabetic suffixes as
+// equivalent (see match.SpeciesMatches).
+func matchesAnySpecies(queries []string, stored string) bool {
+	for _, q := range queries {
+		if match.SpeciesMatches(q, stored) {
+			return true
+		}
+	}
+	return false
 }
 
 // amrColumns returns the fixed column order for AMR output. Headers match the

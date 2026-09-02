@@ -8,6 +8,7 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"github.com/allthebacteria/atb-cli/internal/match"
+	pq "github.com/allthebacteria/atb-cli/internal/parquet"
 )
 
 // FilterFile is the top-level structure for a TOML filter file.
@@ -82,13 +83,25 @@ func (f *Filters) NeedsSylph() bool {
 	return false
 }
 
-// MatchesSpecies performs a case-insensitive exact match against the Species filter.
-// An empty filter matches everything.
+// MatchesSpecies matches the Species filter against a species name, treating
+// GTDB alphabetic suffixes as equivalent so an NCBI-style query
+// ("Enterococcus faecium") matches the GTDB-split names stored in the data
+// ("Enterococcus_A faecium"). An empty filter matches everything.
 func (f *Filters) MatchesSpecies(species string) bool {
 	if f.Species == "" {
 		return true
 	}
-	return strings.EqualFold(f.Species, species)
+	return match.SpeciesMatches(f.Species, species)
+}
+
+// MatchesGenus matches the Genus filter against the genus token of a species
+// name, treating GTDB alphabetic suffixes as equivalent so "Enterococcus"
+// matches "Enterococcus_A faecium". An empty filter matches everything.
+func (f *Filters) MatchesGenus(species string) bool {
+	if f.Genus == "" {
+		return true
+	}
+	return match.SpeciesMatches(f.Genus, pq.GenusFromSpecies(species))
 }
 
 // MatchesSpeciesLike performs a wildcard match using % against the SpeciesLike

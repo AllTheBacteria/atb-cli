@@ -87,6 +87,12 @@ func Query(dataDir string, filters Filters) ([]Result, error) {
 		return nil, err
 	}
 
+	// Expand each requested genus to the GTDB clade partitions that hold its
+	// rows (e.g. "Enterococcus" -> "Enterococcus_A", "Enterococcus_B") so a
+	// split genus is read from every clade file rather than falling back to a
+	// full monolithic scan.
+	filters.Genera = expandGeneraToPartitions(dataDir, filters.Genera)
+
 	// Try SQLite indexes first for each genus.
 	if len(filters.Genera) > 0 {
 		return queryWithIndexes(dataDir, filters)
@@ -351,9 +357,13 @@ func matchesFilters(row pq.AMRRow, f Filters) bool {
 	return true
 }
 
+// matchesAny reports whether value matches any candidate taxon name, treating
+// GTDB alphabetic suffixes as equivalent so an NCBI-style query
+// ("Enterococcus faecium") matches the GTDB-split names stored in the data
+// ("Enterococcus_A faecium").
 func matchesAny(value string, candidates []string) bool {
 	for _, c := range candidates {
-		if strings.EqualFold(value, c) {
+		if match.SpeciesMatches(c, value) {
 			return true
 		}
 	}

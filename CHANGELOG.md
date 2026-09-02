@@ -4,6 +4,19 @@ All notable changes to `atb-cli` are documented here. Format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Changed
+
+- `--species` and `--genus` now match GTDB taxonomy. ATB stores GTDB names,
+  which split NCBI genera and species into alphabetic clades
+  (`Enterococcus_A faecium`, `Enterococcus_B faecium`,
+  `Campylobacter jejunii_A`), so an NCBI-style query such as
+  `atb mlst --species "Enterococcus faecium"` previously returned nothing. The
+  GTDB suffix is now stripped from the stored name during comparison, so an
+  unsuffixed query matches every clade while an explicit clade name
+  (`Campylobacter_D`) still selects only that clade. This applies to `query`,
+  `mlst`, and `amr` on every backend (SQLite index, parquet scan, and AMR genus
+  partitions).
+
 ### Fixed
 
 - `atb <unknown-command>` no longer printed `Run 'atb --help' for usage.`, a

@@ -200,6 +200,9 @@ func TestMatchesSpecies(t *testing.T) {
 		{"exact match", "Salmonella enterica", "Salmonella enterica", true},
 		{"case insensitive match", "salmonella enterica", "Salmonella enterica", true},
 		{"no match", "E. coli", "Salmonella enterica", false},
+		{"ncbi query matches gtdb genus suffix", "Enterococcus faecium", "Enterococcus_A faecium", true},
+		{"ncbi query matches gtdb epithet suffix", "Campylobacter jejunii", "Campylobacter jejunii_A", true},
+		{"different species still no match", "Enterococcus faecium", "Enterococcus_A faecalis", false},
 	}
 
 	for _, tc := range cases {
@@ -208,6 +211,31 @@ func TestMatchesSpecies(t *testing.T) {
 			got := f.MatchesSpecies(tc.species)
 			if got != tc.want {
 				t.Errorf("MatchesSpecies(%q) with filter %q = %v, want %v", tc.species, tc.filter, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestMatchesGenus(t *testing.T) {
+	cases := []struct {
+		name    string
+		filter  string
+		species string
+		want    bool
+	}{
+		{"empty filter matches all", "", "Salmonella enterica", true},
+		{"genus match", "Salmonella", "Salmonella enterica", true},
+		{"case insensitive", "salmonella", "Salmonella enterica", true},
+		{"no match", "Escherichia", "Salmonella enterica", false},
+		{"ncbi genus matches gtdb genus suffix", "Enterococcus", "Enterococcus_A faecium", true},
+		{"different genus still no match", "Enterococcus", "Streptococcus_A pyogenes", false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := Filters{Genus: tc.filter}
+			if got := f.MatchesGenus(tc.species); got != tc.want {
+				t.Errorf("MatchesGenus(%q) with filter %q = %v, want %v", tc.species, tc.filter, got, tc.want)
 			}
 		})
 	}
