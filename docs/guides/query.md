@@ -150,7 +150,7 @@ Output:
 ```
 
 !!! note "Notes on species names"
-    The database uses GTDB taxonomy (not NCBI). Some species names differ from common usage. If a query returns 0 results, the tool suggests close matches. Example: *Enterococcus faecium* in GTDB may be *Enterococcus_B faecium*. Use `--species-like "Enterococcus%faecium"` to search across GTDB naming variants.
+    The database uses GTDB taxonomy (not NCBI), which splits some NCBI species and genera into lettered clades: *Enterococcus faecium* is stored as *Enterococcus_A faecium* and *Enterococcus_B faecium*. `--species` and `--genus` match across these clades automatically, so an NCBI-style name (`--species "Enterococcus faecium"`) finds every clade, while naming an explicit clade (`--species "Enterococcus_A faecium"` or `--genus Campylobacter_D`) restricts the match to it. `--species-like` remains for partial and wildcard matches. If a query still returns 0 results, the tool suggests close matches.
 
 ## Related pages
 

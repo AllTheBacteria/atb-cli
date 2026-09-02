@@ -58,6 +58,8 @@ With `--with-ena` (or any ENA filter), three extra columns are appended: `countr
 
 MLST status values: `PERFECT` (exact match), `NOVEL` (new combination), `OK` (partial), `MIXED`, `BAD`, `MISSING`, `NONE`
 
+`--species` matches GTDB taxonomy: an NCBI-style name such as `--species "Enterococcus faecium"` finds every GTDB clade (`Enterococcus_A faecium`, `Enterococcus_B faecium`), while an explicit clade name restricts the match to it. See the notes on species names in the [query guide](query.md).
+
 ## Related pages
 
 - [Downloading assemblies](download.md) — save matched genome FASTA files to disk

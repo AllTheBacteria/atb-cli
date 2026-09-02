@@ -23,8 +23,8 @@ atb amr --species "Escherichia coli,Klebsiella pneumoniae" --class "BETA-LACTAM"
 # Wildcard species search -- GTDB names keep their underscores
 atb amr --species-like "Campylobacter_D jej%" --hq-only --format tsv
 
-# Match a species across GTDB naming variants
-atb amr --species-like "Enterococcus%faecium" --hq-only --limit 50
+# --species matches every GTDB clade of a name (Enterococcus_A/_B faecium)
+atb amr --species "Enterococcus faecium" --hq-only --limit 50
 
 # Find a gene across ALL genera (no species filter needed)
 atb amr --gene "blaCTX-M-15" --limit 100
