@@ -4,6 +4,8 @@ All notable changes to `atb-cli` are documented here. Format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [v0.22.1](https://github.com/allthebacteria/atb-cli/releases/tag/v0.22.1) - 2026-09-02
+
 ### Fixed
 
 - `atb amr --species "Enterococcus faecium"` (an unsuffixed NCBI name) returned
