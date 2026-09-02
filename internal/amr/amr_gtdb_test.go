@@ -72,6 +72,57 @@ func TestQueryAMRSpeciesGTDBSuffix(t *testing.T) {
 	}
 }
 
+// TestQueryAMRSpeciesGTDBSuffixIndexed verifies that an NCBI-style --species
+// query matches GTDB-split rows through the SQLite index path (not just the
+// parquet scan). Building indexes makes Query route via QueryIndex/buildSQL.
+func TestQueryAMRSpeciesGTDBSuffixIndexed(t *testing.T) {
+	dir := t.TempDir()
+	writeAMRParquetAt(t, filepath.Join(dir, amr.PartitionDir, "Enterococcus_A.parquet"),
+		[]amrFixtureRow{{species: "Enterococcus_A faecium", genus: "Enterococcus_A", count: 2}})
+	writeAMRParquetAt(t, filepath.Join(dir, amr.PartitionDir, "Enterococcus_B.parquet"),
+		[]amrFixtureRow{{species: "Enterococcus_B faecium", genus: "Enterococcus_B", count: 3}})
+
+	if err := amr.BuildIndexes(dir, nil); err != nil {
+		t.Fatalf("BuildIndexes: %v", err)
+	}
+
+	results, err := amr.Query(dir, amr.Filters{
+		Genera:  []string{"Enterococcus"},
+		Species: []string{"Enterococcus faecium"},
+	})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if len(results) != 5 {
+		t.Fatalf("expected 5 GTDB-split rows via index, got %d", len(results))
+	}
+}
+
+// TestQueryAMRSpeciesCladeSelectIndexed verifies that an explicit clade name
+// through the SQLite index path selects only that clade.
+func TestQueryAMRSpeciesCladeSelectIndexed(t *testing.T) {
+	dir := t.TempDir()
+	writeAMRParquetAt(t, filepath.Join(dir, amr.PartitionDir, "Enterococcus_A.parquet"),
+		[]amrFixtureRow{{species: "Enterococcus_A faecium", genus: "Enterococcus_A", count: 2}})
+	writeAMRParquetAt(t, filepath.Join(dir, amr.PartitionDir, "Enterococcus_B.parquet"),
+		[]amrFixtureRow{{species: "Enterococcus_B faecium", genus: "Enterococcus_B", count: 3}})
+
+	if err := amr.BuildIndexes(dir, nil); err != nil {
+		t.Fatalf("BuildIndexes: %v", err)
+	}
+
+	results, err := amr.Query(dir, amr.Filters{
+		Genera:  []string{"Enterococcus"},
+		Species: []string{"Enterococcus_B faecium"},
+	})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if len(results) != 3 {
+		t.Fatalf("expected 3 rows for explicit _B clade, got %d", len(results))
+	}
+}
+
 // TestQueryAMRGenusGTDBPartitions verifies that an NCBI-style genus query reads
 // every on-disk GTDB clade partition, even when no monolithic file is present.
 func TestQueryAMRGenusGTDBPartitions(t *testing.T) {

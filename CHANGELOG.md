@@ -4,6 +4,16 @@ All notable changes to `atb-cli` are documented here. Format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Fixed
+
+- `atb amr --species "Enterococcus faecium"` (an unsuffixed NCBI name) returned
+  0 results when a genus SQLite index was present. The AMR index path matched the
+  raw query with an exact `LOWER(species) IN (...)` clause and never applied the
+  GTDB-suffix stripping used everywhere else, so v0.22.0's GTDB matching reached
+  the parquet scan but not the SQLite index. The index path now resolves the
+  requested species against the stored names with the same GTDB-aware matcher
+  before querying. Explicit clade names still select a single clade.
+
 ## [v0.22.0](https://github.com/allthebacteria/atb-cli/releases/tag/v0.22.0) - 2026-09-02
 
 ### Changed
