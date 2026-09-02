@@ -11,6 +11,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/allthebacteria/atb-cli/internal/match"
+	pq "github.com/allthebacteria/atb-cli/internal/parquet"
 )
 
 // DB wraps a read-only SQLite connection to the index.
@@ -160,22 +161,76 @@ func (d *DB) MLSTForSample(sampleAccession string) (map[string]string, error) {
 	return result, err
 }
 
+// speciesMatching returns the distinct stored sylph_species values for which
+// keep reports true. It is used to resolve a species or genus filter to the
+// concrete GTDB-suffixed names present in the index, so matching can strip
+// GTDB suffixes in Go where SQLite has no regex support.
+func (d *DB) speciesMatching(keep func(stored string) bool) ([]string, error) {
+	rows, err := d.db.Query("SELECT DISTINCT sylph_species FROM samples")
+	if err != nil {
+		return nil, fmt.Errorf("distinct species query: %w", err)
+	}
+	defer rows.Close()
+
+	var names []string
+	for rows.Next() {
+		var s string
+		if err := rows.Scan(&s); err != nil {
+			return nil, fmt.Errorf("scanning species: %w", err)
+		}
+		if keep(s) {
+			names = append(names, s)
+		}
+	}
+	return names, rows.Err()
+}
+
+// inClause builds a "column IN (?, ?, ...)" condition and its arguments for the
+// given values. An empty list yields a condition that matches no rows, so a
+// filter that resolves to nothing returns zero results rather than everything.
+func inClause(column string, values []string) (string, []any) {
+	if len(values) == 0 {
+		return "1 = 0", nil
+	}
+	placeholders := make([]string, len(values))
+	args := make([]any, len(values))
+	for i, v := range values {
+		placeholders[i] = "?"
+		args[i] = v
+	}
+	return fmt.Sprintf("%s IN (%s)", column, strings.Join(placeholders, ", ")), args
+}
+
 // Query runs a filtered query returning result rows as map[string]string.
 func (d *DB) Query(params QueryParams) ([]map[string]string, error) {
 	var conditions []string
 	var args []any
 
 	if params.Species != "" {
-		conditions = append(conditions, "lower(sylph_species) = lower(?)")
-		args = append(args, params.Species)
+		names, err := d.speciesMatching(func(stored string) bool {
+			return match.SpeciesMatches(params.Species, stored)
+		})
+		if err != nil {
+			return nil, err
+		}
+		cond, inArgs := inClause("sylph_species", names)
+		conditions = append(conditions, cond)
+		args = append(args, inArgs...)
 	}
 	if params.SpeciesLike != "" {
 		conditions = append(conditions, "lower(sylph_species) LIKE ? ESCAPE '\\'")
 		args = append(args, match.ToSQLLike(params.SpeciesLike))
 	}
 	if params.Genus != "" {
-		conditions = append(conditions, "lower(substr(sylph_species, 1, instr(sylph_species, ' ') - 1)) = lower(?)")
-		args = append(args, params.Genus)
+		names, err := d.speciesMatching(func(stored string) bool {
+			return match.SpeciesMatches(params.Genus, pq.GenusFromSpecies(stored))
+		})
+		if err != nil {
+			return nil, err
+		}
+		cond, inArgs := inClause("sylph_species", names)
+		conditions = append(conditions, cond)
+		args = append(args, inArgs...)
 	}
 	if params.HQOnly {
 		conditions = append(conditions, "hq_filter = 'PASS'")

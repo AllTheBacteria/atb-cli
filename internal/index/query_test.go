@@ -5,7 +5,96 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	parquetgo "github.com/parquet-go/parquet-go"
+
+	pq "github.com/allthebacteria/atb-cli/internal/parquet"
 )
+
+// buildGTDBIndex builds an index from a minimal assembly.parquet whose species
+// carry GTDB alphabetic suffixes, so tests can assert that an NCBI-style query
+// still finds the suffixed rows.
+func buildGTDBIndex(t *testing.T, species ...string) *DB {
+	t.Helper()
+	dir := t.TempDir()
+
+	f, err := os.Create(filepath.Join(dir, "assembly.parquet"))
+	if err != nil {
+		t.Fatalf("create assembly.parquet: %v", err)
+	}
+	w := parquetgo.NewGenericWriter[pq.AssemblyRow](f)
+	for i, sp := range species {
+		row := pq.AssemblyRow{
+			SampleAccession: pad(i),
+			SylphSpecies:    sp,
+			HQFilter:        "PASS",
+			AsmFastaOnOSF:   1,
+			Dataset:         "test",
+		}
+		if _, err := w.Write([]pq.AssemblyRow{row}); err != nil {
+			t.Fatalf("write row: %v", err)
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("close writer: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("close file: %v", err)
+	}
+
+	if err := Build(dir, func(string, ...any) {}); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	db, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	return db
+}
+
+func pad(i int) string {
+	s := "0000000" + string(rune('0'+i%10))
+	return "SAMN" + s
+}
+
+func TestQuerySpeciesGTDBSuffix(t *testing.T) {
+	db := buildGTDBIndex(t,
+		"Enterococcus_A faecium",
+		"Enterococcus_B faecium",
+		"Enterococcus_A faecalis",
+		"Escherichia coli",
+	)
+
+	rows, err := db.Query(QueryParams{Species: "Enterococcus faecium"})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows for NCBI 'Enterococcus faecium', got %d", len(rows))
+	}
+	for _, r := range rows {
+		if !strings.HasSuffix(r["sylph_species"], "faecium") {
+			t.Errorf("unexpected species %q", r["sylph_species"])
+		}
+	}
+}
+
+func TestQueryGenusGTDBSuffix(t *testing.T) {
+	db := buildGTDBIndex(t,
+		"Enterococcus_A faecium",
+		"Enterococcus_B faecium",
+		"Escherichia coli",
+	)
+
+	rows, err := db.Query(QueryParams{Genus: "Enterococcus"})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 Enterococcus rows for NCBI genus, got %d", len(rows))
+	}
+}
 
 // buildTestIndex creates a fresh index from test fixtures in a temp dir.
 func buildTestIndex(t *testing.T) *DB {

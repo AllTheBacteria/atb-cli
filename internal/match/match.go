@@ -2,7 +2,41 @@
 // filtering paths, so they return the same rows as the SQLite index paths.
 package match
 
-import "strings"
+import (
+	"regexp"
+	"strings"
+)
+
+// gtdbSuffix matches the GTDB alphabetic suffix appended to a taxon word, e.g.
+// the "_A" in "Enterococcus_A" or "jejunii_A". GTDB splits NCBI genera and
+// species and marks the pieces with an uppercase-letter suffix.
+var gtdbSuffix = regexp.MustCompile(`_[A-Z]+$`)
+
+// CanonicalSpecies removes the GTDB alphabetic suffix from each whitespace word
+// of a species name and collapses runs of whitespace to a single space, so a
+// GTDB-suffixed name and the NCBI name a user types reduce to the same string.
+// "Enterococcus_A faecium" and "Enterococcus faecium" both yield
+// "Enterococcus faecium".
+func CanonicalSpecies(species string) string {
+	fields := strings.Fields(species)
+	for i, word := range fields {
+		fields[i] = gtdbSuffix.ReplaceAllString(word, "")
+	}
+	return strings.Join(fields, " ")
+}
+
+// SpeciesMatches reports whether a user-supplied species or genus query matches
+// a stored GTDB name, case-insensitively. The GTDB suffix is stripped from the
+// stored value only: an NCBI-style query ("Enterococcus faecium") matches every
+// GTDB clade ("Enterococcus_A faecium", "Enterococcus_B faecium"), while a query
+// that carries an explicit suffix ("Enterococcus_A faecium") still selects only
+// that clade.
+func SpeciesMatches(query, stored string) bool {
+	if strings.EqualFold(query, stored) {
+		return true
+	}
+	return strings.EqualFold(query, CanonicalSpecies(stored))
+}
 
 // Like reports whether value matches pattern. % matches any sequence of
 // characters, every other character including _ is literal, and matching is
