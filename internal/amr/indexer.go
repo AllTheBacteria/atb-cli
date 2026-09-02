@@ -300,6 +300,17 @@ func QueryIndex(dbPath string, filters Filters) ([]Result, error) {
 		}
 	}
 
+	if len(filters.Species) > 0 {
+		resolved, err := resolveIndexSpecies(db, filters.Species)
+		if err != nil {
+			return nil, wrapStaleIndexError(dbPath, err)
+		}
+		if len(resolved) == 0 {
+			return nil, nil
+		}
+		filters.Species = resolved
+	}
+
 	query, args := buildSQL(filters)
 	rows, err := db.Query(query, args...)
 	if err != nil {
@@ -327,6 +338,33 @@ func QueryIndex(dbPath string, filters Filters) ([]Result, error) {
 		results = append(results, r)
 	}
 	return results, rows.Err()
+}
+
+// resolveIndexSpecies reads the distinct species stored in the index and returns
+// the concrete values that match any requested query under GTDB-aware matching.
+// SQLite cannot evaluate the GTDB suffix regex, so matching happens in Go and the
+// resolved names feed buildSQL's exact IN clause.
+func resolveIndexSpecies(db *sql.DB, queries []string) ([]string, error) {
+	rows, err := db.Query("SELECT DISTINCT species FROM amr")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var resolved []string
+	for rows.Next() {
+		var stored string
+		if err := rows.Scan(&stored); err != nil {
+			return nil, err
+		}
+		for _, q := range queries {
+			if match.SpeciesMatches(q, stored) {
+				resolved = append(resolved, stored)
+				break
+			}
+		}
+	}
+	return resolved, rows.Err()
 }
 
 func buildSQL(f Filters) (string, []any) {
