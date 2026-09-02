@@ -4,6 +4,8 @@ All notable changes to `atb-cli` are documented here. Format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [v0.22.0](https://github.com/allthebacteria/atb-cli/releases/tag/v0.22.0) - 2026-09-02
+
 ### Changed
 
 - `--species` and `--genus` now match GTDB taxonomy. ATB stores GTDB names,
